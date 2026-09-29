@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CWG3</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#2b2418}
+body{display:flex;flex-direction:column;font-family:'Libre Baskerville',Georgia,serif;color:#f1e4c6}
+#top{display:flex;gap:6px;align-items:center;padding:6px 10px;flex-wrap:wrap;background:linear-gradient(#3b2a1c,#2a1d13);color:#e9d9b4;border-bottom:2px solid #9c7a33}
+#top .brand{font-weight:700;letter-spacing:.08em;margin-right:8px}
+#clock{font-size:13px}
+#top button{cursor:pointer;border-radius:4px;padding:4px 9px;font:inherit;font-size:12px;background:linear-gradient(#d8b66a,#9c7a33);border:1px solid #5a441a;color:#2a1d0c}
+#top button.on{box-shadow:0 0 0 2px #f3dc9a inset;filter:brightness(1.18)}
+#wrap{flex:1;position:relative;min-height:0}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+#map{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair;touch-action:none}
+#panel{height:196px;display:grid;grid-template-columns:150px 1fr 290px;gap:10px;padding:10px 12px;background:repeating-linear-gradient(92deg,#4a3322 0 7px,#442e1e 7px 13px,#4f3726 13px 22px);border-top:3px solid #9c7a33}
+.box{border-radius:6px;padding:8px 10px;overflow:auto;background:rgba(20,12,6,.45);border:1px solid #8a6a2c;box-shadow:inset 0 0 12px rgba(0,0,0,.5)}
+.portrait{width:74px;height:84px;border-radius:4px;margin:0 auto 4px;display:block}
+.lname{font-size:13px;text-align:center;line-height:1.2}.swords{text-align:center;font-size:13px}
+h3{margin:0 0 2px;font-size:16px}.sub{font-size:12px;opacity:.85;margin-bottom:4px;line-height:1.45}.small{font-size:11px;opacity:.85;margin-bottom:6px}.muted{opacity:.7;font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 14px;font-size:12px}
+.stat{display:flex;align-items:center;gap:6px}.stat b{width:38px}
+.bar{flex:1;height:8px;border-radius:4px;overflow:hidden;background:rgba(0,0,0,.25)}.bar i{display:block;height:100%}
+.tri{display:flex;height:10px;border-radius:3px;overflow:hidden;margin:4px 0 2px}.tri i{display:block;height:100%}
+.btns{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.btns button{font:inherit;font-size:12px;padding:3px 8px;border-radius:4px;cursor:pointer;background:linear-gradient(#e2c27a,#a8843a);border:1px solid #5a441a;color:#23170a}
+.tname{font-size:15px;font-weight:700;margin-bottom:4px}.tline{font-size:12px;line-height:1.55}
+#toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);padding:8px 14px;border-radius:6px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;background:rgba(20,12,6,.88);border:1px solid #9c7a33;color:#f1e4c6}
+#toast.show{opacity:1}
+#report{position:absolute;top:10px;right:10px;width:330px;padding:10px 12px;border-radius:6px;background:rgba(20,12,6,.93);border:2px solid #9c7a33;font-size:12px;line-height:1.55;display:none;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.6)}
+#report.show{display:block}#report .rt{font-weight:700;color:#f3dc9a;margin-bottom:3px}#report .rr{font-size:15px;font-weight:700;margin-bottom:3px}hr{border:0;border-top:1px solid #6b5327;margin:5px 0}
+@media (max-width:800px){#panel{height:auto;max-height:45vh;grid-template-columns:1fr;overflow:auto}#leader{display:none}}
+#res{font-size:12px;opacity:.85;margin-right:auto}#clock{margin-right:14px!important}
+#top .endb{background:linear-gradient(#f0d58a,#b8913d);font-weight:700}
+#top .endb.go{animation:endglow 1.4s ease-in-out infinite;background:linear-gradient(#ffe7a0,#d9a83e)}
+@keyframes endglow{0%,100%{box-shadow:0 0 0 0 rgba(255,215,110,.0)}50%{box-shadow:0 0 12px 3px rgba(255,215,110,.9)}}
+#ready{display:flex;gap:4px;margin-left:auto}
+#coach{position:absolute;top:10px;left:50%;transform:translateX(-50%);max-width:620px;padding:9px 34px 9px 14px;border-radius:8px;background:rgba(244,232,204,.96);color:#2a1d0c;border:2px solid #9c7a33;box-shadow:0 6px 18px rgba(0,0,0,.45);font-size:13.5px;line-height:1.5;z-index:4;display:none}
+#coach b{color:#6b2a10}#coach .ct{font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#7a5a1e;margin-bottom:2px}
+#coach .x{position:absolute;top:5px;right:8px;cursor:pointer;font-size:15px;color:#7a5a1e}#coach kbd{font:700 11px system-ui;background:#fff8e6;border:1px solid #b89a5a;border-radius:3px;padding:0 4px}
+#top{flex-wrap:nowrap;white-space:nowrap}#top #res,#top #clock{font-size:12px;overflow:hidden;text-overflow:ellipsis;min-width:0}#top #res{flex-shrink:2}#top #clock{flex-shrink:1}
+#top button{padding:3px 7px}
+#top #ready button{font-weight:700;padding:3px 9px;border-radius:12px}
+#top #ready .rf{background:linear-gradient(#e0553d,#a8231a);color:#fff;border-color:#5a120c}
+#top #ready .rm{background:linear-gradient(#ffe08a,#d9a83e);color:#2a1d0c}
+#top #ready .rd{background:rgba(255,255,255,.08);color:#b9a98a;border-color:#6b5327;cursor:default}
+#roster{position:absolute;left:8px;top:8px;bottom:8px;width:230px;overflow:auto;background:rgba(20,12,6,.82);border:1px solid #8a6a2c;border-radius:6px;font-size:12px;display:none}
+#roster .rh{padding:6px 8px;font-weight:700;border-bottom:1px solid #6b5327;position:sticky;top:0;background:#2a1d13}
+#roster .ru{display:grid;grid-template-columns:18px 1fr 22px;gap:2px 4px;padding:5px 8px;border-bottom:1px solid rgba(138,106,44,.25);cursor:pointer}
+#roster .ru:hover{background:rgba(232,196,106,.12)}#roster .ru.sel{background:rgba(232,196,106,.25)}#roster .ru.done{opacity:.55}
+#roster .rb{padding:5px 8px;background:rgba(156,122,51,.25);font-weight:700;cursor:pointer;border-bottom:1px solid #6b5327}#roster .rb small{font-weight:400;opacity:.7}
+#roster .rd{padding:6px 8px;background:rgba(243,227,160,.18);font-weight:700;cursor:pointer;border-bottom:1px solid #6b5327;color:#f3dc9a}#roster .rd small,#roster .rb small{font-weight:400;opacity:.75}#roster .ind .rb{padding-left:14px}#roster .ind .ru{padding-left:18px}
+#roster .fold{cursor:pointer;opacity:.8;margin-right:4px;font-weight:400}
+.chain{font-size:11px;margin-bottom:4px;opacity:.95;line-height:1.6}.chain .lk{cursor:pointer;white-space:nowrap}.chain .lk:hover{text-decoration:underline}.chain i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;vertical-align:middle}
+#roster .rm{text-align:right;color:#e8c46a}#roster .rs{grid-column:2/4;font-size:10.5px;opacity:.75}.warn{color:#ff9a6a;font-weight:700}
+#roster .rb.bdone{opacity:.62}#roster .rb.bwait{box-shadow:inset 3px 0 0 #ffd66e}#roster .ok{color:#9fdc8a;font-weight:700}#roster .await{color:#ffd66e;font-weight:700;font-size:10.5px}#roster .rfire{color:#ff6a4a;font-weight:700}.bchips{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}.bchip{font-size:11px;padding:1px 7px;border-radius:9px;cursor:pointer;border:1px solid rgba(0,0,0,.4)}.bchip.cm{background:#f2cd62;color:#1a1208}.bchip.cf{background:#c8321e;color:#fff}.bchip.cd{background:rgba(255,255,255,.08);color:rgba(255,255,255,.5)}.bchip:hover{outline:2px solid #fff}
+#mini{position:absolute;right:8px;bottom:8px;border:2px solid #9c7a33;border-radius:4px;box-shadow:0 2px 10px rgba(0,0,0,.6);cursor:pointer;display:none}
+#overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(10,6,2,.55);z-index:10}
+#overlay.show{display:flex}#overlay.full{background:radial-gradient(ellipse at 50% 40%,#5a4028,#1a120a)}
+.modal{background:#2a1d13;border:2px solid #9c7a33;border-radius:8px;padding:16px 20px;min-width:340px;max-width:520px;box-shadow:0 10px 40px rgba(0,0,0,.7)}
+.modal h2{margin:0 0 10px;font-size:19px;color:#f3dc9a}.modal label{display:block;margin:8px 0;font-size:13px}.modal .chk{display:flex;gap:8px;align-items:center}
+.modal select,.modal input:not([type=checkbox]){display:block;width:100%;margin-top:4px;padding:5px;font:inherit;font-size:13px;background:#f1e4c6;border:1px solid #5a441a;border-radius:4px}
+.hint{font-size:12px;opacity:.8;line-height:1.5;margin:6px 0}.sum{padding-left:18px;font-size:13px;line-height:1.7}.sum .warn{color:#ff9a6a}
+.mbtns{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+.mbtns button,.title button,.slot{font:inherit;font-size:13px;padding:6px 14px;border-radius:4px;cursor:pointer;background:linear-gradient(#e2c27a,#a8843a);border:1px solid #5a441a;color:#23170a}
+.mbtns button.primary,.title button.primary{background:linear-gradient(#f6de96,#c49a3e);font-weight:700}
+.slots{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto}.slot{text-align:left}.slot small,.title small{opacity:.7;margin-left:6px;font-size:11px}
+.title{text-align:center}.title .tt{font-size:72px;font-weight:700;letter-spacing:.12em;color:#f3dc9a;text-shadow:0 3px 0 #5a441a,0 8px 30px rgba(0,0,0,.8)}
+.title .ts{font-style:italic;margin:4px 0 28px;opacity:.85}.title .tb{display:flex;flex-direction:column;gap:10px;width:300px;margin:0 auto}.title button{padding:10px;font-size:15px}
+</style>
+</head>
+<body>
+<div id="top">
+  <span class="brand">CWG3</span><span id="clock"></span><span id="res"></span>
+  <button data-act="T" data-optb="counters" title="Soldier figures / counters (T)">Counters</button>
+  <button data-act="L" data-tool="los" title="Line-of-sight tool (L)">LOS</button>
+  <button data-act="H" data-tool="heights" title="Show heights (H)">Heights</button>
+  <button data-act="C" data-tool="cmd" title="Command lines for the whole army (C)">Command</button>
+  <button data-act="O" data-optb="roster" title="Unit roster (O)">Roster</button>
+  <button style="display:none" data-act="J" data-optb="bdeMode" title="Brigade command (J): clicking a battalion selects its whole brigade; Option-click for a single battalion. Off = classic battalion control">Brigade cmd</button>
+    <button data-act="?" data-optb="coach" title="How to play: step-by-step tips on screen (?)">?</button>
+  <button data-act="M" title="Menu: save, load, options (M)">Menu</button>
+  <span id="ready"></span>
+  <button data-act="E" class="endb" title="End turn (E)">End turn</button>
+</div>
+<div id="wrap"><canvas id="gl"></canvas><canvas id="map"></canvas><div id="roster"></div><canvas id="mini"></canvas><div id="toast"></div><div id="report"></div></div>
+<div id="overlay"></div>
+<div id="panel"><div id="leader" class="box"></div><div id="unit" class="box"></div><div id="terrain" class="box"></div></div>
+<script src="src/core.js"></script>
+<script src="src/rules.js"></script>
+<script src="src/sight_move.js"></script>
+<script src="src/render_map.js"></script>
+<script src="assets/art/art.js"></script>
+<script src="src/render_art.js"></script>
+<script src="assets/sprites/units.js"></script>
+<script src="assets/art/kit.js"></script>
+<script src="src/render_units.js"></script>
+<script src="src/maps/demo.js"></script>
+<script src="src/units_demo.js"></script>
+<script src="src/oob.js"></script>
+<script src="src/turns.js"></script>
+<script src="src/combat.js"></script>
+<script src="src/fx.js"></script>
+<script src="src/menu.js"></script>
+<script src="src/hud.js"></script>
+<script src="src/ui.js"></script>
+<script src="src/orders.js"></script>
+<script src="src/ai.js"></script>
+<script src="src/vendor/three.min.js"></script>
+<script src="src/render3d.js"></script>
+<script src="src/game.js"></script>
+</body>
+</html>

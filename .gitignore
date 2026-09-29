@@ -1,0 +1,7 @@
+.DS_Store
+__pycache__/
+*.pyc
+assets/art/art.js
+assets/art/kit.js
+assets/art/scenery.js
+assets/art/review_*.jpg

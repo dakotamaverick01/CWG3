@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>CWG3 sprite renderer</title>
+<style>body{margin:0;background:#777}canvas{display:block}</style></head>
+<body>
+<script type="module">
+// CWG3 sprite renderer: builds our own low-poly 3D soldiers & guns, poses them, renders a sprite atlas.
+// Run headless (tools/sprites/render.py) → assets/sprites/*.png + units.js manifest.
+import * as THREE from './vendor/three.module.min.js';
+const CELL = 96, GCELL = 160, DIRS = 6;
+const UNIFORMS = {
+  us:         { coat: 0x2e3d63, trou: 0x6d88ab, hat: 'kepi', hatc: 0x1d2542, flag: 0x2c4f9e, gear: 0x17120d },
+  cs_gray:    { coat: 0x8b8c86, trou: 0x6f6a5c, hat: 'kepi', hatc: 0x7a7b75, flag: 0xa3261e, gear: 0x2a2016 },
+  cs_slouch:  { coat: 0x86877f, trou: 0x7a6a50, hat: 'slouch', hatc: 0x4a3c2c, flag: 0xa3261e, gear: 0x2a2016 },
+  cs_butter:  { coat: 0xa27f4d, trou: 0x7e6a4b, hat: 'slouch', hatc: 0x5a4632, flag: 0xa3261e, gear: 0x2a2016 },
+};
+const POSES = ['stand', 'march1', 'march2', 'aim', 'fire', 'charge1', 'charge2', 'fall', 'crew', 'bearer1', 'bearer2'];
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x5a4a30, 1.1));
+const sun = new THREE.DirectionalLight(0xfff1d6, 2.6); sun.position.set(-4, 7, -2.5); scene.add(sun); // from upper-left, like the map's hillshade
+const fill = new THREE.DirectionalLight(0xbfd0ff, .55); fill.position.set(3, 3, 5); scene.add(fill);
+const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: .82, metalness: 0, ...o });
+const SKIN = M(0xd6a07a, { roughness: .7 }), WOOD = M(0x5a391d, { roughness: .6 }), STEEL = M(0x9aa0a6, { metalness: .8, roughness: .35 }), BLACK = M(0x121212), TAN = M(0xc8b890), TIN = M(0xa9a9a2, { metalness: .6, roughness: .4 });
+const OUTLINE = new THREE.MeshBasicMaterial({ color: 0x14100a, side: THREE.BackSide });
+function part(geo, mat, parent, pos = [0, 0, 0], rot = [0, 0, 0], outline = true) {
+  const m = new THREE.Mesh(geo, mat); m.position.set(...pos); m.rotation.set(...rot); parent.add(m);
+  if (outline) { const o = new THREE.Mesh(geo, OUTLINE); o.scale.setScalar(1.12); m.add(o); } return m; }
+const cap = (r, l) => new THREE.CapsuleGeometry(r, l, 4, 10);
+const joint = (parent, pos) => { const g = new THREE.Group(); g.position.set(...pos); parent.add(g); return g; };
+// ---------- soldier ----------
+function soldier(U, opts = {}) {
+  const coat = M(U.coat), trou = M(U.trou), hatm = M(U.hatc), gear = M(U.gear);
+  const root = new THREE.Group(), hips = joint(root, [0, .95, 0]); root.userData.hips = hips;
+  const torso = joint(hips, [0, .02, 0]);
+  part(cap(.17, .36), coat, torso, [0, .3, 0]);                       // body
+  part(new THREE.CylinderGeometry(.18, .19, .16, 12), coat, torso, [0, .06, 0]); // coat skirt
+  part(new THREE.BoxGeometry(.38, .04, .24), gear, torso, [0, .02, 0], [0, 0, 0], false); // belt
+  part(new THREE.BoxGeometry(.14, .12, .06), gear, torso, [.12, -.02, -.15]); // cartridge box
+  part(new THREE.BoxGeometry(.16, .16, .05), TAN, torso, [-.2, -.02, -.06], [0, 1.4, 0]); // haversack
+  part(new THREE.CylinderGeometry(.08, .08, .04, 14), TIN, torso, [-.19, .06, .08], [0, 0, 1.57]); // canteen
+  if (!opts.noRoll) part(new THREE.TorusGeometry(.2, .05, 6, 14, Math.PI * 1.15), M(0x55606e), torso, [.02, .44, 0], [0, 0, -.5 - Math.PI * .08]); // blanket roll
+  const neck = joint(torso, [0, .56, 0]), head = joint(neck, [0, .1, 0]);
+  part(new THREE.SphereGeometry(.11, 14, 12), SKIN, head, [0, 0, 0]);
+  part(new THREE.SphereGeometry(.1, 10, 8, 0, Math.PI * 2, Math.PI * .45, Math.PI * .55), M(0x3b2a1a), head, [0, -.01, -.01], [0, 0, 0], false); // hair/beard shadow
+  if (U.hat === 'kepi') { part(new THREE.CylinderGeometry(.095, .11, .14, 14), hatm, head, [0, .1, -.015], [-.28, 0, 0]); part(new THREE.CylinderGeometry(.075, .075, .012, 12, 1, false, -Math.PI / 2, Math.PI), BLACK, head, [0, .05, .09], [0, 0, 0]); }
+  else { part(new THREE.CylinderGeometry(.24, .24, .015, 18), hatm, head, [0, .07, 0], [.08, 0, .05]); part(new THREE.CylinderGeometry(.1, .115, .12, 14), hatm, head, [0, .13, 0]); }
+  const arm = side => { const sh = joint(torso, [side * .22, .5, 0]); part(cap(.055, .22), coat, sh, [0, -.15, 0]); const el = joint(sh, [0, -.3, 0]); part(cap(.05, .2), coat, el, [0, -.13, 0]);
+    const hand = joint(el, [0, -.28, 0]); part(new THREE.SphereGeometry(.05, 8, 6), SKIN, hand, [0, 0, 0], [0, 0, 0], false); return { sh, el, hand }; };
+  const leg = side => { const hp = joint(hips, [side * .1, -.02, 0]); part(cap(.075, .34), trou, hp, [0, -.22, 0]); const kn = joint(hp, [0, -.45, 0]); part(cap(.065, .34), trou, kn, [0, -.22, 0]);
+    part(new THREE.BoxGeometry(.1, .07, .22), BLACK, kn, [0, -.47, .04]); return { hp, kn }; };
+  const R = arm(-1), L = arm(1), RL = leg(-1), LL = leg(1);
+  Object.assign(root.userData, { torso, head, neck, R, L, RL, LL });
+  if (!opts.noMusket) { const mus = new THREE.Group(); part(new THREE.CylinderGeometry(.018, .025, 1.0, 8), WOOD, mus, [0, -.1, 0]); part(new THREE.CylinderGeometry(.012, .012, .62, 6), STEEL, mus, [0, .7, 0]);
+    part(new THREE.BoxGeometry(.05, .2, .09), WOOD, mus, [0, -.62, -.02]); if (opts.bayonet) part(new THREE.ConeGeometry(.01, .4, 5), STEEL, mus, [0, 1.2, .02]); mus.scale.setScalar(.82); root.userData.musket = mus; }
+  if (opts.flag) { const fl = new THREE.Group(); part(new THREE.CylinderGeometry(.018, .018, 2.3, 6), WOOD, fl, [0, .75, 0]); part(new THREE.SphereGeometry(.04, 8, 6), TIN, fl, [0, 1.92, 0]);
+    const cloth = new THREE.PlaneGeometry(.8, .6, 8, 4), pa = cloth.attributes.position; for (let i = 0; i < pa.count; i++) { const x = pa.getX(i); pa.setZ(i, Math.sin((x + .45) * 5) * .06 * (x + .45)); } cloth.computeVertexNormals();
+    part(cloth, M(U.flag, { side: THREE.DoubleSide, roughness: .9 }), fl, [.42, 1.55, 0], [0, 0, 0], false); root.userData.flag = fl; }
+  return root;
+}
+const rad = d => d * Math.PI / 180;
+function pose(s, p) {
+  const u = s.userData, set = (j, x = 0, y = 0, z = 0) => j.rotation.set(rad(x), rad(y), rad(z)), hold = (obj, parent, pos, rot) => { parent.add(obj); obj.position.set(...pos); obj.rotation.set(...rot.map(rad)); };
+  const mus = u.musket, walk = (a) => { set(u.RL.hp, a); set(u.RL.kn, a < 0 ? -a * 1.1 : 5); set(u.LL.hp, -a); set(u.LL.kn, a > 0 ? a * 1.1 : 5); };
+  switch (p) {
+    case 'stand': set(u.RL.hp); set(u.LL.hp); set(u.L.sh, 0, 0, 6); set(u.R.sh, 0, 0, -10); set(u.R.el, -10); if (mus) hold(mus, s, [-.25, 1.34, .04], [-6, 0, 0]); break;
+    case 'march1': case 'march2': { const a = p === 'march1' ? 24 : -24; walk(a); set(u.L.sh, -a * .8, 0, 6); set(u.R.sh, 0, 0, -10); set(u.R.el, -10); if (mus) hold(mus, s, [-.25, 1.34, .06], [-10, 0, 0]); u.torso.rotation.x = rad(4); break; }
+    case 'aim': case 'fire': set(u.RL.hp, -8, 0, -6); set(u.LL.hp, 18, 0, 6); set(u.LL.kn, 8); u.torso.rotation.set(rad(6), rad(-25), 0); set(u.head, 10, 20, 0);
+      set(u.L.sh, -80, 20, 0); set(u.L.el, -10); set(u.R.sh, -60, -35, 0); set(u.R.el, -80); if (mus) hold(mus, s, [-.07, 1.42, .42], [90, 0, 0]);
+      if (p === 'fire' && mus) { u.torso.rotation.x = rad(-2); const smoke = new THREE.Group(); [[0, 0, 0, .12], [.08, .05, .1, .1], [-.05, .08, .16, .09], [.02, -.03, .24, .08]].forEach(([x, y, z, r]) => part(new THREE.SphereGeometry(r, 8, 6), M(0xf2f0ea, { roughness: 1, transparent: true, opacity: .85 }), smoke, [x, y, z], [0, 0, 0], false));
+        part(new THREE.SphereGeometry(.05, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffd060 }), smoke, [0, 0, -.06], [0, 0, 0], false); mus.add(smoke); smoke.position.set(0, 1.12, 0); } break;
+    case 'charge1': case 'charge2': { const a = p === 'charge1' ? 38 : -30; walk(a); u.torso.rotation.x = rad(18); set(u.head, -10);
+      set(u.R.sh, -45, 0, -10); set(u.R.el, -50); set(u.L.sh, -70, 15, 5); set(u.L.el, -30); if (mus) hold(mus, s, [-.05, 1.05, .45], [100, 0, 0]); break; }
+    case 'fall': s.userData.hips.position.y = .16; s.userData.hips.rotation.set(rad(-86), 0, rad(8)); set(u.L.sh, -150, 0, 20); set(u.R.sh, -30, 0, -40); set(u.LL.hp, 10); set(u.LL.kn, 30); set(u.RL.hp, -5);
+      if (mus) { s.add(mus); mus.position.set(.35, .05, .5); mus.rotation.set(rad(90), 0, rad(70)); } break;
+    case 'crew': set(u.L.sh, -40, 0, 10); set(u.L.el, -60); set(u.R.sh, -30, 0, -10); set(u.R.el, -50); u.torso.rotation.x = rad(12); set(u.RL.hp, -10); set(u.LL.hp, 12); break;
+    case 'bearer1': case 'bearer2': { const a = p === 'bearer1' ? 18 : -18; walk(a); set(u.R.sh, -35, 0, -5); set(u.R.el, -70); set(u.L.sh, -30, 0, 5); set(u.L.el, -70);
+      s.add(u.flag); u.flag.position.set(.02, .55, .22); u.flag.rotation.set(rad(-8), 0, rad(-4)); u.flag.children[2].rotation.y = rad(a * 1.2); break; }
+  }
+}
+// ---------- 12-pdr Napoleon + limber ----------
+function napoleon(firing) {
+  const g = new THREE.Group(), green = M(0x4f5c3b), bronze = M(0x9a7440, { metalness: .75, roughness: .38 }), iron = M(0x2a2a2a, { metalness: .5, roughness: .5 });
+  const prof = [[0, 0], [.16, 0], [.17, .08], [.15, .12], [.155, .5], [.14, .9], [.12, 1.4], [.13, 1.55], [.11, 1.6], [.06, 1.6]].map(([r, y]) => new THREE.Vector2(r, y));
+  const barrel = part(new THREE.LatheGeometry(prof, 20), bronze, g, [0, 1.12, -.35], [Math.PI / 2 - rad(4), 0, 0]); part(new THREE.SphereGeometry(.09, 10, 8), bronze, barrel, [0, -.05, 0]);
+  const wheel = x => { const w = new THREE.Group(); w.position.set(x, .7, 0); g.add(w); part(new THREE.TorusGeometry(.66, .045, 6, 28), WOOD, w, [0, 0, 0], [0, Math.PI / 2, 0]); part(new THREE.TorusGeometry(.66, .02, 4, 28), iron, w, [0, 0, 0], [0, Math.PI / 2, 0], false);
+    part(new THREE.CylinderGeometry(.12, .12, .2, 12), WOOD, w, [0, 0, 0], [0, 0, Math.PI / 2]); for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6; part(new THREE.CylinderGeometry(.018, .025, .62, 5), WOOD, w, [0, Math.sin(a) * .33, Math.cos(a) * .33], [a, 0, 0], false); } };
+  wheel(-.62); wheel(.62); part(new THREE.CylinderGeometry(.05, .05, 1.3, 8), iron, g, [0, .7, 0], [0, 0, Math.PI / 2]);
+  for (const x of [-.18, .18]) part(new THREE.BoxGeometry(.07, .22, 2.3), green, g, [x, .62, -.95], [rad(17), 0, 0]);
+  part(new THREE.BoxGeometry(.4, .14, .25), green, g, [0, .12, -2.02], [rad(10), 0, 0]); part(new THREE.BoxGeometry(.3, .16, .5), green, g, [0, .9, .1]);
+  if (firing) { const sm = new THREE.Group(); g.add(sm); sm.position.set(0, 1.1, 1.75); sm.scale.setScalar(.75); [[0, 0, 0, .5], [.4, .2, .4, .45], [-.35, .3, .5, .42], [.1, .5, .8, .5], [-.2, .1, 1.0, .4]].forEach(([x, y, z, r]) => part(new THREE.SphereGeometry(r, 10, 8), M(0xefede6, { roughness: 1, transparent: true, opacity: .8 }), sm, [x, y, z], [0, 0, 0], false));
+    part(new THREE.SphereGeometry(.28, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffc050 }), sm, [0, 0, -.25], [0, 0, 0], false); }
+  return g;
+}
+function limbered() { const g = new THREE.Group(), gun = napoleon(false); gun.rotation.y = Math.PI; gun.position.z = -1.2; g.add(gun);
+  const green = M(0x4f5c3b), lim = new THREE.Group(); lim.position.z = 1.5; g.add(lim);
+  for (const x of [-.62, .62]) { const w = new THREE.Group(); w.position.set(x, .7, 0); lim.add(w); part(new THREE.TorusGeometry(.66, .045, 6, 28), WOOD, w, [0, 0, 0], [0, Math.PI / 2, 0]); for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6; part(new THREE.CylinderGeometry(.018, .025, .62, 5), WOOD, w, [0, Math.sin(a) * .33, Math.cos(a) * .33], [a, 0, 0], false); } }
+  part(new THREE.BoxGeometry(1.0, .5, .6), green, lim, [0, 1.15, 0]); part(new THREE.BoxGeometry(1.05, .06, .65), M(0x3a4430), lim, [0, 1.42, 0]); part(new THREE.CylinderGeometry(.04, .04, 2.2, 6), WOOD, lim, [0, .8, 1.2], [Math.PI / 2 - .1, 0, 0]); return g; }
+// ---------- camera & capture ----------
+function cam(size) { const c = new THREE.OrthographicCamera(-size / 2, size / 2, size / 2, -size / 2, .1, 50); const el = rad(38); c.position.set(0, Math.sin(el) * 20, Math.cos(el) * 20); c.lookAt(0, size * .36, 0); return c; }
+// game direction d (0=E,1=SE,2=SW,3=W,4=NW,5=NE on screen) → model yaw so its +Z points that way on screen
+const yaw = d => { const t = rad(d * 60); return Math.atan2(Math.cos(t), Math.sin(t)); };
+const shadow = (r, parent) => { const s = new THREE.Mesh(new THREE.CircleGeometry(r, 20), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: .28 })); s.rotation.x = -Math.PI / 2; s.position.y = .01; s.scale.set(1, .6, 1); parent.add(s); return s; };
+async function sheet(cells, cell, size) {
+  const cols = 16, rows = Math.ceil(cells.length / cols), out = document.createElement('canvas'); out.width = cols * cell; out.height = rows * cell; const ctx = out.getContext('2d');
+  renderer.setSize(cell, cell); const camera = cam(size), frames = {};
+  cells.forEach((c, i) => { const holder = new THREE.Group(); scene.add(holder); const obj = c.build(); obj.rotation.y = yaw(c.dir); holder.add(obj); shadow(c.shadow, holder);
+    renderer.setClearColor(0, 0); renderer.render(scene, camera); const x = (i % cols) * cell, y = Math.floor(i / cols) * cell; ctx.drawImage(renderer.domElement, x, y); frames[c.key] = [x, y]; scene.remove(holder); });
+  return { png: out.toDataURL('image/png'), frames, cell, cols };
+}
+window.RENDER = async () => {
+  const men = [];
+  for (const [uk, U] of Object.entries(UNIFORMS)) for (const p of POSES) for (let d = 0; d < DIRS; d++)
+    men.push({ key: `${uk}/${p}/${d}`, dir: d, shadow: .35, build: () => { const s = soldier(U, { flag: p.startsWith('bearer'), noMusket: p === 'crew' || p.startsWith('bearer'), bayonet: p.startsWith('charge') }); pose(s, p); return s; } });
+  const guns = [];
+  for (let d = 0; d < DIRS; d++) { guns.push({ key: `napoleon/unl/${d}`, dir: d, shadow: 1.3, build: () => napoleon(false) }); guns.push({ key: `napoleon/fire/${d}`, dir: d, shadow: 1.3, build: () => napoleon(true) }); guns.push({ key: `napoleon/lim/${d}`, dir: d, shadow: 1.6, build: () => limbered() }); }
+  const A = await sheet(men, CELL, 2.7), B = await sheet(guns, GCELL, 5.6);
+  return { men: A, guns: B, uniforms: Object.keys(UNIFORMS), poses: POSES };
+};
+window.READY = true;
+</script></body></html>
