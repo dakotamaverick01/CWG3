@@ -8,8 +8,8 @@ CW.R3 = (function () {
   const EX = 30, FOV = 30, TILT_MIN = 40, TILT_MAX = 80, TILT_DEF = 58;   // EX = height of one level in map px (hex radius 44)
   let ok = false, failed = false, ren, scene, cam, dcv, dctx, dtex, ttex, terrainSrc = null, M, MW, MH, HW, HH, HF, glc;
   const S = { tilt: TILT_DEF, anim: null, last: null, live: false, raf: 0, prev: 0, acc: 0, n: 0, win0: 0, mats: [] };
-  // ---------- living landscape (session 17a): cloud shadows + water flow, one time uniform, patched into the ground material ----------
-  const U = { uT: { value: 0 }, uLive: { value: 0 }, uWater: { value: null }, uMap: { value: window.THREE ? new THREE.Vector2(1, 1) : null } };
+  // ---------- living landscape (sessions 17a-b): cloud shadows, water flow, tree sway, warm haze; one time uniform, patched into the ground material ----------
+  const U = { uT: { value: 0 }, uLive: { value: 0 }, uWater: { value: null }, uForest: { value: null }, uMap: { value: window.THREE ? new THREE.Vector2(1, 1) : null } };
   const GLSL_NOISE = `
     float cwH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float cwN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -20,10 +20,19 @@ CW.R3 = (function () {
     mat.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, U);
       sh.vertexShader = 'varying vec3 vCwW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vCwW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      sh.fragmentShader = `varying vec3 vCwW; uniform float uT, uLive; uniform sampler2D uWater; uniform vec2 uMap;${GLSL_NOISE}\n` + sh.fragmentShader
-        .replace('#include <map_fragment>', `#include <map_fragment>
-  float cwGlint = 0.0;
+      sh.fragmentShader = `varying vec3 vCwW; uniform float uT, uLive; uniform sampler2D uWater, uForest; uniform vec2 uMap;${GLSL_NOISE}\n` + sh.fragmentShader
+        .replace('#include <map_fragment>', (water ? `
+  // tree sway: inside the forest mask only, the painted canopies wobble 1-2 px (slow sine + noise); roads, walls and open ground stay put
+  vec2 cwOff = vec2(0.0);
+  if (uLive > 0.5) { float fm = texture2D(uForest, (vCwW.xz + uMap * 0.5) / uMap).a;
+    if (fm > 0.01) { float n = cwN(vCwW.xz / 70.0 + uT * 0.06) * 6.283;
+      cwOff = fm * 1.6 * vec2(sin(uT * 0.9 + vCwW.x * 0.031 + n), 0.5 * sin(uT * 0.7 + vCwW.z * 0.027 + n)) / uMap; } }
+  #ifdef USE_MAP
+    diffuseColor *= texture2D(map, vMapUv + cwOff);
+  #endif` : '#include <map_fragment>') + `
+  float cwGlint = 0.0, cwWarm = 0.0;
   if (uLive > 0.5) {
+    cwWarm = 0.5 + 0.5 * sin(uT * 0.10472);   // ~60 s sun-warmth cycle, shared with the fog colour (tick)
     // cloud shadows: soft fbm blobs drifting slowly from the west; at most 18% darker, lit patches a touch warmer
     vec2 cp = vCwW.xz / 900.0 + vec2(uT * 0.010, uT * 0.004);
     float sh = smoothstep(0.50, 0.72, cwF(cp)), lit = 1.0 - sh;
@@ -39,7 +48,7 @@ CW.R3 = (function () {
       cwGlint = wa * pow(smoothstep(0.62, 0.95, rip), 3.0) * tw;
     }` : ''}
   }`)
-        .replace('#include <opaque_fragment>', 'outgoingLight += cwGlint * vec3(1.0, 0.80, 0.42) * 0.55;\n#include <opaque_fragment>');
+        .replace('#include <opaque_fragment>', 'outgoingLight += cwGlint * vec3(1.0, 0.80, 0.42) * 0.55;\n  outgoingLight *= mix(vec3(1.0), vec3(1.025, 1.005, 0.97), cwWarm);\n#include <opaque_fragment>');
     };
     mat.customProgramCacheKey = () => 'cwLiving' + (water ? 'W' : '');
     S.mats.push(mat); return mat;
@@ -60,6 +69,19 @@ CW.R3 = (function () {
     if (U.uWater.value) U.uWater.value.dispose();
     const t = new THREE.DataTexture(d, w, h, THREE.RGBAFormat); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; U.uWater.value = t; U.uMap.value.set(MW, MH);
   }
+  // forest mask at 1/8 scale, once per map load: A = sway weight. Forest + orchard hexes, softened, with roads and walls/fences cut out
+  function buildForest() {
+    const q = 8, w = Math.ceil(MW / q), h = Math.ceil(MH / q); let A = document.createElement('canvas'); A.width = w; A.height = h; const a = A.getContext('2d');
+    a.filter = 'blur(1.5px)'; a.scale(1 / q, 1 / q); a.fillStyle = '#fff';
+    M.all.forEach(([c, r]) => { if ('fo'.includes(M.ter(c, r))) { const [x, y] = CW.center(c, r); CW.hexPath(a, x, y, CW.R * .96); a.fill(); } });
+    a.filter = 'none'; a.globalCompositeOperation = 'destination-out'; a.strokeStyle = '#000'; a.lineCap = a.lineJoin = 'round';
+    (M.roads || []).forEach(rd => { CW.smoothPath(a, rd.p.map(p => CW.center(...p))); a.lineWidth = (rd.major ? 11 : 8) + 10; a.stroke(); });
+    M.edgeAt && M.edgeAt.forEach((types, k) => { if (![...types].some(t => t === 'wall' || t === 'fence')) return; const [c, r, d] = k.split(',').map(Number), [x, y] = CW.center(c, r);
+      a.beginPath(); a.moveTo(...CW.corner(x, y, d)); a.lineTo(...CW.corner(x, y, d + 1)); a.lineWidth = 22; a.stroke(); });
+    const d = new Uint8Array(a.getImageData(0, 0, w, h).data.buffer.slice(0)); A.width = A.height = 0; A = null;
+    if (U.uForest.value) U.uForest.value.dispose();
+    const t = new THREE.DataTexture(d, w, h, THREE.RGBAFormat); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; U.uForest.value = t;
+  }
   function hexWater() {   // fallback when the painted art isn't loaded: river through the river hexes, streams along their hex edges
     const riv = M.all.filter(([c, r]) => 'wbd'.includes(M.ter(c, r))).map(hx => CW.center(...hx)).sort((p, q) => p[1] - q[1]), streams = [];
     M.edgeAt && M.edgeAt.forEach((types, k) => { if (![...types].includes('stream')) return; const [c, r, d] = k.split(',').map(Number), [x, y] = CW.center(c, r); streams.push([CW.corner(x, y, d), CW.corner(x, y, d + 1)]); });
@@ -73,10 +95,12 @@ CW.R3 = (function () {
     const dt = now - S.prev; S.prev = now;
     S.acc += Math.min(dt, 500); S.n++;   // one long stall (map repaint) can't trip it alone; a slow machine can if (!S.win0) S.win0 = now;
     if (now - S.win0 >= 3000) { const avg = S.n ? S.acc / S.n : 0; S.avg = avg; S.acc = S.n = 0; S.win0 = now; if (avg > 40 && S.onSlow) { S.onSlow(avg); return; } }
-    U.uT.value = now / 1000; try { ren.render(scene, cam); } catch (e) { fail(e.message); }
+    U.uT.value = now / 1000; warmFog(); try { ren.render(scene, cam); } catch (e) { fail(e.message); }
   }
+  const FOG0 = window.THREE && new THREE.Color(0xd9c49a), FOG1 = window.THREE && new THREE.Color(0xe2c18e);   // haze: base → a touch warmer, same 60 s cycle as the shader
+  function warmFog() { if (scene && scene.fog) scene.fog.color.lerpColors(FOG0, FOG1, S.live ? .5 + .5 * Math.sin(U.uT.value * .10472) : 0); }
   function setLive(on) { on = !!(on && ok); if (on === S.live) return; S.live = on; U.uLive.value = on ? 1 : 0;
-    if (on) { S.prev = performance.now(); S.acc = S.n = 0; S.win0 = 0; if (!S.raf) S.raf = requestAnimationFrame(tick); } else if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; } }
+    if (on) { S.prev = performance.now(); S.acc = S.n = 0; S.win0 = 0; if (!S.raf) S.raf = requestAnimationFrame(tick); } else { if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; } warmFog(); } }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && S.live && !S.raf) { S.prev = performance.now(); S.acc = S.n = 0; S.win0 = 0; S.raf = requestAnimationFrame(tick); } });
   // timing helper for tests: ms per ground render (synchronised with a 1-px read)
   function bench(n = 30, live = S.live) { if (!ok || !S.last) return null; const keep = U.uLive.value, px = new Uint8Array(4), gl = ren.getContext(); U.uLive.value = live ? 1 : 0;
@@ -105,6 +129,7 @@ CW.R3 = (function () {
       ren.shadowMap.enabled = true; ren.shadowMap.type = THREE.PCFShadowMap; ren.shadowMap.autoUpdate = false; ren.shadowMap.needsUpdate = true;   // the hills never move: cast their shadows once
       ren.debug.onShaderError = (gl, prog, vs, fs) => { console.warn('Living landscape shader failed; effects off'); S.mats.forEach(m => { m.onBeforeCompile = () => {}; m.customProgramCacheKey = () => 'plain'; m.needsUpdate = true; }); setLive(false); S.broken = true; };
       U.uWater.value = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat); U.uWater.value.needsUpdate = true;
+      U.uForest.value = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat); U.uForest.value.needsUpdate = true;
       buildHeights(); scene = new THREE.Scene();
       // sky: blue overhead fading to a warm haze at the horizon; the haze also swallows distant ground (aerial perspective)
       const sk = document.createElement('canvas'); sk.width = 4; sk.height = 256; const kx = sk.getContext('2d'), g = kx.createLinearGradient(0, 0, 0, 256);
@@ -134,7 +159,7 @@ CW.R3 = (function () {
     return ok;
   }
   function fail(why) { if (failed) return; failed = true; ok = false; console.warn('3D battlefield off, using flat map:', why); if (glc) glc.style.display = 'none'; CW.toast && CW.toast('3D battlefield unavailable here, so the flat map is in use'); }
-  const tex = img => { if (img === terrainSrc) return; terrainSrc = img; ttex.image = img; ttex.needsUpdate = true; try { buildWater(); } catch (e) { console.warn('water mask skipped:', e.message); }   // grass under the board edge, from the painting's own colours
+  const tex = img => { if (img === terrainSrc) return; terrainSrc = img; ttex.image = img; ttex.needsUpdate = true; try { buildWater(); } catch (e) { console.warn('water mask skipped:', e.message); } try { buildForest(); } catch (e) { console.warn('forest mask skipped:', e.message); }   // grass under the board edge, from the painting's own colours
     try { const d = img.getContext('2d').getImageData(0, 0, 40, 40).data; let r = 0, g = 0, b = 0; for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; } const n = d.length / 4;
       S.skirt.material.color.setRGB(r / n / 255, g / n / 255, b / n / 255, THREE.SRGBColorSpace).multiplyScalar(.85); } catch (e) { /* tainted or lost: keep default */ } };
   // ---------- camera ----------
@@ -150,7 +175,7 @@ CW.R3 = (function () {
   function render(gc, w, h, dpr, terrainImg) {
     if (!ok) return false;
     try { tex(terrainImg); if (ren.getPixelRatio() !== dpr || ren.domElement.width !== Math.round(w * dpr) || ren.domElement.height !== Math.round(h * dpr)) { ren.setPixelRatio(dpr); ren.setSize(w, h, false); }
-      place(gc, w, h); dtex.needsUpdate = true; U.uT.value = performance.now() / 1000; ren.render(scene, cam); return true; }
+      place(gc, w, h); dtex.needsUpdate = true; U.uT.value = performance.now() / 1000; warmFog(); ren.render(scene, cam); return true; }
     catch (e) { fail(e.message); return false; }
   }
   // screen position of a map point on the ground, and how many screen px one map px measures there
@@ -169,5 +194,5 @@ CW.R3 = (function () {
   const tilt = dv => { S.tilt = Math.max(TILT_MIN, Math.min(TILT_MAX, S.tilt + dv)); return S.tilt; };
   function sweep(gc, fitZ, redraw) { if (!ok) return; S.anim = { t0: performance.now(), dur: 3200, tilt: 32, z: Math.min(gc.z, fitZ * .75) };
     const loop = () => { redraw(); if (S.anim) requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
-  return { init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, bench, onSlow: f => { S.onSlow = f; }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get failed() { return failed; } };
+  return { init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, bench, onSlow: f => { S.onSlow = f; }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
 })();
