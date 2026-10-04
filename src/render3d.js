@@ -7,20 +7,20 @@
 CW.R3 = (function () {
   const EX = 30, FOV = 30, TILT_MIN = 40, TILT_MAX = 80, TILT_DEF = 58;   // EX = height of one level in map px (hex radius 44)
   let ok = false, failed = false, ren, scene, cam, dcv, dctx, dtex, ttex, terrainSrc = null, M, MW, MH, HW, HH, HF, glc;
-  const S = { tilt: TILT_DEF, anim: null, last: null, live: false, raf: 0, prev: 0, acc: 0, n: 0, win0: 0, mats: [] };
-  // ---------- living landscape (sessions 17a-b): cloud shadows, water flow, tree sway, warm haze; one time uniform, patched into the ground material ----------
+  const S = { tilt: TILT_DEF, anim: null, last: null, live: false, raf: 0, prev: 0, acc: 0, n: 0, win0: 0, mats: [], wk: new Map(), src: null, threads: null };
+  // ---------- living landscape (sessions 17a-b, 18): cloud shadows, creek wake, brook thread, tree sway, warm haze; one time uniform, patched into the ground material ----------
   const U = { uT: { value: 0 }, uLive: { value: 0 }, uWater: { value: null }, uForest: { value: null }, uMap: { value: window.THREE ? new THREE.Vector2(1, 1) : null } };
   const GLSL_NOISE = `
     float cwH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float cwN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
       return mix(mix(cwH(i), cwH(i + vec2(1, 0)), f.x), mix(cwH(i + vec2(0, 1)), cwH(i + vec2(1, 1)), f.x), f.y); }
     float cwF(vec2 p) { float v = 0.0, a = 0.5; for (int k = 0; k < 4; k++) { v += a * cwN(p); p = p * 2.03 + 17.0; a *= 0.5; } return v; }`;
-  // clouds on every ground surface; water only where the flow mask says so
+  // clouds on every ground surface; the creek wake only inside the creek mask
   function living(mat, water) {
     mat.onBeforeCompile = sh => {
-      Object.assign(sh.uniforms, U);
+      Object.assign(sh.uniforms, U, CW.WAKE ? CW.WAKE.U : {});
       sh.vertexShader = 'varying vec3 vCwW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vCwW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      sh.fragmentShader = `varying vec3 vCwW; uniform float uT, uLive; uniform sampler2D uWater, uForest; uniform vec2 uMap;${GLSL_NOISE}\n` + sh.fragmentShader
+      sh.fragmentShader = `varying vec3 vCwW; uniform float uT, uLive; uniform sampler2D uWater, uForest, uWake; uniform vec2 uMap, uWTx; uniform vec4 uWBox;${GLSL_NOISE}\n` + sh.fragmentShader
         .replace('#include <map_fragment>', (water ? `
   // tree sway: inside the forest mask only, the painted canopies wobble 1-2 px (slow sine + noise); roads, walls and open ground stay put
   vec2 cwOff = vec2(0.0);
@@ -30,44 +30,68 @@ CW.R3 = (function () {
   #ifdef USE_MAP
     diffuseColor *= texture2D(map, vMapUv + cwOff);
   #endif` : '#include <map_fragment>') + `
-  float cwGlint = 0.0, cwWarm = 0.0;
+  float cwSheen = 0.0, cwWarm = 0.0;
   if (uLive > 0.5) {
     cwWarm = 0.5 + 0.5 * sin(uT * 0.10472);   // ~60 s sun-warmth cycle, shared with the fog colour (tick)
     // cloud shadows: soft fbm blobs drifting slowly from the west; at most 18% darker, lit patches a touch warmer
     vec2 cp = vCwW.xz / 900.0 + vec2(uT * 0.010, uT * 0.004);
     float sh = smoothstep(0.50, 0.72, cwF(cp)), lit = 1.0 - sh;
     diffuseColor.rgb *= (1.0 - 0.18 * sh) * mix(vec3(1.0), vec3(1.035, 1.012, 0.975), lit);
-    ${water ? `vec4 wm = texture2D(uWater, (vCwW.xz + uMap * 0.5) / uMap);
-    float wa = smoothstep(0.25, 0.75, wm.a);
-    if (wa > 0.0) {
-      vec2 fd = normalize(wm.rg * 2.0 - 1.0 + vec2(1e-4)), fp = vec2(-fd.y, fd.x);
-      vec2 q = vec2(dot(vCwW.xz, fd), dot(vCwW.xz, fp));
-      float rip = cwN(vec2((q.x - uT * 14.0) / 9.0, q.y / 3.5)) * 0.6 + cwN(vec2((q.x - uT * 22.0) / 4.0, q.y / 2.0 + 7.0)) * 0.4;
-      diffuseColor.rgb *= 1.0 + wa * 0.10 * (rip - 0.5);
-      float tw = 0.55 + 0.45 * sin(uT * 3.1 + cwH(floor(q / 6.0)) * 6.283);
-      cwGlint = wa * pow(smoothstep(0.62, 0.95, rip), 3.0) * tw;
-    }` : ''}
+    ${water ? `// session 18: the creek is shaded from the wake heightfield (CW.WAKE): troughs darker, a thin pale sheen on crests, foam only at the bank
+    if (uWBox.z > 0.0) { vec2 mp = vCwW.xz + uMap * 0.5, wuv = (mp - uWBox.xy) / uWBox.zw;
+      float wm = (wuv.x > 0.0 && wuv.x < 1.0 && wuv.y > 0.0 && wuv.y < 1.0) ? texture2D(uWater, mp / uMap).a : 0.0;
+      if (wm > 0.02) {
+        float h = texture2D(uWake, wuv).r, core = smoothstep(0.45, 0.85, wm), band = smoothstep(0.04, 0.3, wm) * (1.0 - core);
+        vec2 g = vec2(texture2D(uWake, wuv + vec2(uWTx.x, 0.0)).r - texture2D(uWake, wuv - vec2(uWTx.x, 0.0)).r,
+                      texture2D(uWake, wuv + vec2(0.0, uWTx.y)).r - texture2D(uWake, wuv - vec2(0.0, uWTx.y)).r);
+        float sl = -dot(g, vec2(-0.6, 0.8));                           // slope facing the camera (south) and the sun (west)
+        diffuseColor.rgb *= (1.0 - 0.32 * wm * smoothstep(0.0, 0.18, -h)) * (1.0 + 0.05 * wm * smoothstep(0.0, 0.18, h));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.76, 0.78, 0.76), band * 0.35 * smoothstep(0.08, 0.40, abs(h) + length(g)));
+        cwSheen = core * smoothstep(0.04, 0.14, sl) * smoothstep(0.02, 0.12, h);
+      } }` : ''}
   }`)
-        .replace('#include <opaque_fragment>', 'outgoingLight += cwGlint * vec3(1.0, 0.80, 0.42) * 0.55;\n  outgoingLight *= mix(vec3(1.0), vec3(1.025, 1.005, 0.97), cwWarm);\n#include <opaque_fragment>');
+        .replace('#include <opaque_fragment>', 'outgoingLight += cwSheen * vec3(0.80, 0.85, 0.86) * 0.25;\n  outgoingLight *= mix(vec3(1.0), vec3(1.025, 1.005, 0.97), cwWarm);\n#include <opaque_fragment>');
     };
     mat.customProgramCacheKey = () => 'cwLiving' + (water ? 'W' : '');
     S.mats.push(mat); return mat;
   }
-  // water mask at 1/4 scale, once per map load: RG = flow direction, A = water. Paths come from the painter (CW.WATER) or the hex data
+  // creek mask at 1/4 scale, once per map load: A = water, softened ~4 px at the bank (foam band). Then the wake field and the brook threads
   function buildWater() {
-    const q = 4, w = Math.ceil(MW / q), h = Math.ceil(MH / q), W = CW.WATER || hexWater(); let A = document.createElement('canvas'), B = document.createElement('canvas');
-    A.width = B.width = w; A.height = B.height = h; const a = A.getContext('2d'), b = B.getContext('2d'); a.scale(1 / q, 1 / q); b.scale(1 / q, 1 / q);
-    const lines = []; if (W.river && W.river.length > 1) lines.push([W.river, W.rw || CW.R * .46]); (W.streams || []).forEach(p => p.length > 1 && lines.push([p, 6]));
-    a.lineCap = b.lineCap = 'round'; a.lineJoin = b.lineJoin = 'round';
-    for (let [pts, lw] of lines) {
-      if (hAt(...pts[0]) < hAt(...pts[pts.length - 1]) - 1) pts = pts.slice().reverse();          // water runs downhill
-      for (let i = 0; i < pts.length - 1; i++) { const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], L = Math.hypot(x1 - x0, y1 - y0) || 1;
-        a.strokeStyle = `rgb(${Math.round(((x1 - x0) / L * .5 + .5) * 255)},${Math.round(((y1 - y0) / L * .5 + .5) * 255)},128)`; a.lineWidth = lw * 2 + 8; a.beginPath(); a.moveTo(x0, y0); a.lineTo(x1, y1); a.stroke(); }
-      CW.smoothPath(b, pts); b.strokeStyle = '#fff'; b.lineWidth = lw; b.stroke(); }
-    a.setTransform(1, 0, 0, 1, 0, 0); a.globalCompositeOperation = 'destination-in'; a.drawImage(B, 0, 0);
-    const d = new Uint8Array(a.getImageData(0, 0, w, h).data.buffer.slice(0)); A.width = A.height = B.width = B.height = 0; A = B = null;   // release the scratch canvases
+    const q = 4, w = Math.ceil(MW / q), h = Math.ceil(MH / q), W = CW.WATER || hexWater(); let A = document.createElement('canvas'); A.width = w; A.height = h;
+    const a = A.getContext('2d'); a.filter = 'blur(1px)'; a.scale(1 / q, 1 / q); a.lineCap = a.lineJoin = 'round';
+    if (W.river && W.river.length > 1) { CW.smoothPath(a, W.river); a.strokeStyle = '#fff'; a.lineWidth = (W.rw || CW.R * .46) * 1.05; a.stroke(); }
+    const d = new Uint8Array(a.getImageData(0, 0, w, h).data.buffer.slice(0)); A.width = A.height = 0; A = null;   // release the scratch canvas
     if (U.uWater.value) U.uWater.value.dispose();
     const t = new THREE.DataTexture(d, w, h, THREE.RGBAFormat); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; U.uWater.value = t; U.uMap.value.set(MW, MH);
+    if (CW.WAKE) { try { CW.WAKE.build(ren, W, hAt, MW, MH); } catch (e) { console.warn('wake field skipped:', e.message); } }
+    buildThreads(W.streams || []);
+  }
+  // brooks: still painted water plus one pale thread drifting downstream along each recorded stream path (living on only)
+  const THREAD_VS = 'attribute float aS, aV; varying float vS, vV; void main() { vS = aS; vV = aV; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
+  const THREAD_FS = `uniform float uT; varying float vS, vV; float h1(float n) { return fract(sin(n * 91.7) * 43758.5453); }
+    void main() { float p = vS / 46.0 - uT * 0.55, k = floor(p), f = fract(p), len = 0.35 + 0.3 * h1(k);
+      float a = smoothstep(0.0, 0.08, f) * (1.0 - smoothstep(len - 0.12, len, f)) * (0.35 + 0.45 * h1(k + 7.0)) * (1.0 - vV * vV);
+      gl_FragColor = vec4(0.86, 0.90, 0.89, a * 0.7); }`;
+  function buildThreads(streams) {
+    if (S.threads) { scene.remove(S.threads); S.threads.children.forEach(m => m.geometry.dispose()); }
+    const g = new THREE.Group(); g.visible = S.live; S.threads = g; scene.add(g);
+    S.tmat = S.tmat || new THREE.ShaderMaterial({ vertexShader: THREAD_VS, fragmentShader: THREAD_FS, uniforms: { uT: U.uT }, transparent: true, depthWrite: false, fog: false,
+      polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    for (let pts of streams) { if (pts.length < 2) continue;
+      if (hAt(...pts[0]) < hAt(...pts[pts.length - 1]) - 1) pts = pts.slice().reverse();          // downstream = downhill
+      const c = [];                                                                                // the same curve CW.smoothPath paints
+      for (let i = 0; i < pts.length - 1; i++) { const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+        const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6], c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+        const n = Math.max(2, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 3));
+        for (let k = i ? 1 : 0; k <= n; k++) { const t = k / n, u = 1 - t; c.push([u * u * u * p1[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * p2[0], u * u * u * p1[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * p2[1]]); } }
+      const pos = [], aS = [], aV = [], idx = []; let s = 0;
+      c.forEach(([x, y], i) => { const [px, py] = c[Math.max(0, i - 1)], [nx, ny] = c[Math.min(c.length - 1, i + 1)], L = Math.hypot(nx - px, ny - py) || 1, ox = -(ny - py) / L * .55, oy = (nx - px) / L * .55;
+        if (i) s += Math.hypot(x - c[i - 1][0], y - c[i - 1][1]);
+        for (const sd of [-1, 1]) { const qx = x + ox * sd, qy = y + oy * sd; pos.push(qx - MW / 2, hAt(qx, qy) + 1, qy - MH / 2); aS.push(s); aV.push(sd); }
+        if (i) { const j = i * 2; idx.push(j - 2, j - 1, j, j - 1, j + 1, j); } });
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('aS', new THREE.Float32BufferAttribute(aS, 1));
+      geo.setAttribute('aV', new THREE.Float32BufferAttribute(aV, 1)); geo.setIndex(idx);
+      const m = new THREE.Mesh(geo, S.tmat); m.renderOrder = 1; m.frustumCulled = false; g.add(m); }
   }
   // forest mask at 1/8 scale, once per map load: A = sway weight. Forest + orchard hexes, softened, with roads and walls/fences cut out
   function buildForest() {
@@ -93,13 +117,21 @@ CW.R3 = (function () {
     S.raf = requestAnimationFrame(tick);
     if (now - S.prev < 32) return;
     const dt = now - S.prev; S.prev = now;
-    S.acc += Math.min(dt, 500); S.n++;   // one long stall (map repaint) can't trip it alone; a slow machine can if (!S.win0) S.win0 = now;
+    S.acc += Math.min(dt, 500); S.n++; if (!S.win0) S.win0 = now;   // one long stall (map repaint) can't trip it alone; a slow machine can
     if (now - S.win0 >= 3000) { const avg = S.n ? S.acc / S.n : 0; S.avg = avg; S.acc = S.n = 0; S.win0 = now; if (avg > 40 && S.onSlow) { S.onSlow(avg); return; } }
-    U.uT.value = now / 1000; warmFog(); try { ren.render(scene, cam); } catch (e) { fail(e.message); }
+    U.uT.value = now / 1000; warmFog();
+    try { if (CW.WAKE && CW.WAKE.ok) { feedWake(Math.min(dt, 100) / 1000); CW.WAKE.step(Math.min(dt, 100) / 1000, cam, MW, MH); } ren.render(scene, cam); } catch (e) { fail(e.message); }
   }
+  // wading infantry/cavalry (from game.js): stamp a trail between last frame's spot and this one, stronger the faster they go
+  const WAKE_S = 1.5;   // a 2-hex ford crossing gives a peak of ~1 that is gone in ~2 s
+  function feedWake(dt) { const src = S.src && S.src(); if (!src) return; const seen = new Set();
+    for (const o of src) { seen.add(o.id); const p = S.wk.get(o.id); S.wk.set(o.id, [o.x, o.y, o.wade]); if (!p || !(o.wade || p[2])) continue;   // last frame's hex counts too
+      const d = Math.hypot(o.x - p[0], o.y - p[1]); if (d < .3 || d > CW.HW * 4) continue;
+      CW.WAKE.trail(p[0], p[1], o.x, o.y, Math.min(1, d / dt / 900) * WAKE_S * (o.cav ? 1.3 : 1)); }
+    for (const k of S.wk.keys()) if (!seen.has(k)) S.wk.delete(k); }
   const FOG0 = window.THREE && new THREE.Color(0xd9c49a), FOG1 = window.THREE && new THREE.Color(0xe2c18e);   // haze: base → a touch warmer, same 60 s cycle as the shader
   function warmFog() { if (scene && scene.fog) scene.fog.color.lerpColors(FOG0, FOG1, S.live ? .5 + .5 * Math.sin(U.uT.value * .10472) : 0); }
-  function setLive(on) { on = !!(on && ok); if (on === S.live) return; S.live = on; U.uLive.value = on ? 1 : 0;
+  function setLive(on) { on = !!(on && ok); if (on === S.live) return; S.live = on; U.uLive.value = on ? 1 : 0; if (S.threads) S.threads.visible = on; S.wk.clear(); if (CW.WAKE) CW.WAKE.clear();
     if (on) { S.prev = performance.now(); S.acc = S.n = 0; S.win0 = 0; if (!S.raf) S.raf = requestAnimationFrame(tick); } else { if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; } warmFog(); } }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && S.live && !S.raf) { S.prev = performance.now(); S.acc = S.n = 0; S.win0 = 0; S.raf = requestAnimationFrame(tick); } });
   // timing helper for tests: ms per ground render (synchronised with a 1-px read)
@@ -194,5 +226,5 @@ CW.R3 = (function () {
   const tilt = dv => { S.tilt = Math.max(TILT_MIN, Math.min(TILT_MAX, S.tilt + dv)); return S.tilt; };
   function sweep(gc, fitZ, redraw) { if (!ok) return; S.anim = { t0: performance.now(), dur: 3200, tilt: 32, z: Math.min(gc.z, fitZ * .75) };
     const loop = () => { redraw(); if (S.anim) requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
-  return { init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, bench, onSlow: f => { S.onSlow = f; }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
+  return { init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, bench, onSlow: f => { S.onSlow = f; }, wakeSource: f => { S.src = f; }, wade: (x0, y0, x1, y1, s) => { if (S.live && CW.WAKE && CW.WAKE.ok) CW.WAKE.trail(x0, y0, x1, y1, s * WAKE_S); }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get renderer() { return ren; }, get threads() { return S.threads; }, get camera() { return cam; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
 })();

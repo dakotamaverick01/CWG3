@@ -301,3 +301,17 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
   3. Added position: sticky; bottom: 0 to .btns to keep Formation/Rest/Dig-in/Skip buttons visible while stats scroll above
   4. Verified no hardcoded 196px references in game.js or hud.js (none found)
 - All CSS changes reviewed in git diff; no JavaScript changes
+
+## Session 18 (4 Oct) — creek wake field replaces the noise ripple ✅
+- Removed: gold `cwGlint` twinkles and the two-speed noise ripple (river and brooks). River's painted gold dashes → faint pale (render_art.js).
+- Brooks (CW.WATER.streams): still painted water_0 + one pale thread drifting downstream (~25 px/s) along each recorded path — a 1.1 px ribbon mesh draped on the hills, broken into irregular streaks. Living on only. No simulation.
+- New `src/water_wake.js` (CW.WAKE): Evan Wallace heightfield (MIT, github.com/evanw/webgl-water) on the main creek only. Half-float ping-pong RGBA (R height, G velocity), domain = creek bounding box at 256 cells on the long axis (Millbrook: 27×256, 5.6 px/cell). Adds downstream drift (field sampled upstream along the mask's flow direction). Bank = outside the creek mask: dry neighbour mirrors the cell (no leak onto the field), bank cells damped (weak reflection). Plus faint flow pulses (P.AMB = 0.03; set 0 to turn off).
+- Drops: wading infantry/cavalry only (hex is river or ford, bridge excluded; guns/leaders never), only units the player can see. Strength ∝ glide speed (cavalry ×1.3); computer-turn moves (no glide) stamp along the wet steps at once. A 2-hex ford crossing peaks ~1.0, drifts ~60 px downstream and is gone in ~2 s (sim_test).
+- Shading (ground shader, inside the creek mask only): troughs darker, thin pale sheen on crest slopes facing camera/sun, pale foam only in the bank band. No reflection or refraction pass.
+- Stepped only while living is on AND the creek box is in the camera frustum; 60 steps/s, max 4 per frame.
+- Mill wheel: no mill prop exists on the map → skipped (no new building).
+- Fixed: the fps window start (`S.win0`) had been commented out mid-line, so the first 3-s check could trip auto-off early.
+- Cost (headless SwiftShader, CPU-emulated, so only relative): wake step 0.45 ms per sim step; ground render with living on +6% vs off (same as 17a/b). On a real GPU the 27×256 pass is a few microseconds; creek fragments do 5 extra texture reads. Living stays default ON; the existing slow-frame auto-off still guards it.
+- Shots: docs/shots/18_living_off.jpg, 18_living_on_wake.jpg (22nd Virginia stepping into Lyle's Ford; wake just downstream).
+- Tuning knobs: CW.WAKE.P (K wave speed, ADV drift, DV/DH damping, EDGE bank soak, R drop radius, AMB pulses); render3d WAKE_S (unit strength).
+- Watch on the Mac: wake is small at default zoom (creek is ~3.5 cells wide); if it reads too faint, raise WAKE_S or the trough term in render3d.

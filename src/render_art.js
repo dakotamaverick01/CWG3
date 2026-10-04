@@ -138,7 +138,7 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet) {
   each('s', (x, y) => { for (let i = 0; i < 9; i++) { const px = x + (rand() - .5) * R * 1.4, py = y + (rand() - .5) * R * 1.2;
     if (i % 2 === 0) { ctx.fillStyle = 'rgba(70,95,105,.55)'; ctx.beginPath(); ctx.ellipse(px, py + 4, 8 + rand() * 6, 3 + rand() * 2, 0, 0, 7); ctx.fill(); ctx.fillStyle = 'rgba(255,210,140,.25)'; ctx.beginPath(); ctx.ellipse(px - 2, py + 3, 4, 1.2, 0, 0, 7); ctx.fill(); }
     ctx.strokeStyle = 'rgba(60,70,25,.85)'; ctx.lineWidth = 1.1; for (let j = -2; j <= 2; j++) { ctx.beginPath(); ctx.moveTo(px + j * 2, py); ctx.lineTo(px + j * 3.2, py - 6 - rand() * 5); ctx.stroke(); } } });
-  // river: muddy banks, deep water, golden sky reflections
+  // river: muddy banks, deep water, faint pale sky reflections (session 18: pale dashes, not gold)
   const riv = M.all.filter(([c, r]) => 'wbd'.includes(M.ter(c, r))).map(h => CW.center(...h)).sort((a, b) => a[1] - b[1]);
   if (riv.length) { riv.unshift([riv[0][0], riv[0][1] - R * 1.4]); riv.push([riv[riv.length - 1][0], riv[riv.length - 1][1] + R * 1.4]);
     const rw = R * .46; CW.WATER.river = riv.map(p => p.slice()); CW.WATER.rw = rw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -147,7 +147,7 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet) {
     ctx.strokeStyle = 'rgba(40,30,15,.35)'; ctx.lineWidth = rw + 5; ctx.stroke();
     ctx.strokeStyle = RW ? pat('water_1', 0, 0, 0, .3) : '#2f5566'; ctx.lineWidth = rw; ctx.stroke();
     ctx.strokeStyle = 'rgba(70,120,130,.8)'; ctx.lineWidth = rw * .6; ctx.stroke();
-    ctx.setLineDash([6, 22, 2, 30]); ctx.strokeStyle = 'rgba(255,214,150,.55)'; ctx.lineWidth = 1.6; ctx.stroke(); ctx.setLineDash([]); }
+    ctx.setLineDash([6, 22, 2, 30]); ctx.strokeStyle = 'rgba(222,230,228,.28)'; ctx.lineWidth = 1.4; ctx.stroke(); ctx.setLineDash([]); }
   // roads: packed-earth texture with ruts
   for (const rd of M.roads) { const pts = rd.p.map(p => CW.center(...p)), w = rd.major ? 11 : 8; CW.smoothPath(ctx, pts); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.strokeStyle = 'rgba(60,42,20,.45)'; ctx.lineWidth = w + 4; ctx.stroke();
