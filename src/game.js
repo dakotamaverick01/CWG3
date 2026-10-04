@@ -3,7 +3,7 @@
 (function () {
 const M = CW.loadMap(window.MAP_DEMO), R = CW.R, [MW, MH] = CW.mapSize(M);
 const G = CW.G = { opts: CW.loadOpts(), units: [], reinf: [], side: 'CS', player: 'CS', turn: 1, minutes: 480, weather: 'clear', supply: { CS: 400, US: 600 }, morale: { CS: 50, US: 50 }, endAt: 2160,
-  sel: null, reach: null, hover: null, tool: { los: false, heights: false, sight: false }, undo: [], vis: new Set(), cam: { x: 0, y: 0, z: 1 }, started: false };
+  sel: null, reach: null, hover: null, tool: { los: false, heights: false, sight: false }, undo: [], vis: new Set(), cam: { x: 0, y: 0, z: 1 }, started: false, anim: null };
 CW.M = M;
 const cv = document.getElementById('map'), sx = cv.getContext('2d'), mapCache = {}, glc = document.getElementById('gl');
 let cx = sx;   // cx = where the current layer draws: the screen, or (3D battlefield) the markings decal laid over the hills
@@ -34,7 +34,7 @@ function updateObjectives() { (G.obj || []).forEach(o => { const b = CW.bodiesAt
 CW.vp = () => { const v = { CS: 0, US: 0 }; (G.obj || []).forEach(o => { if (o[4]) v[o[4]] += o[3]; }); const c = G.cas || { CS: 0, US: 0 };
   v.CS += Math.round(c.US / 40) + G.morale.CS - 50; v.US += Math.round(c.CS / 40) + G.morale.US - 50; return v; };
 G.attackMode = 'fire'; const MODEN = { fire: 'Volley', assault: 'Assault', charge: 'Charge' };
-function groupAttack(e, shift) { const mode = shift && G.attackMode === 'fire' ? 'assault' : G.attackMode, all = { kind: mode === 'fire' ? 'volley' : mode, arc: 'front', rep: [], result: '' }; let n = 0, why = '';
+function groupAttack(e, shift) { G.anim = null; const mode = shift && G.attackMode === 'fire' ? 'assault' : G.attackMode, all = { kind: mode === 'fire' ? 'volley' : mode, arc: 'front', rep: [], result: '' }; let n = 0, why = '';
   const ms = G.group.filter(u => u.type !== 'ldr' && !u.gone && u.side === G.side).sort((p, q) => CW.dist([p.c, p.r], [e.c, e.r]) - CW.dist([q.c, q.r], [e.c, e.r]));
   const tgtHex = [e.c, e.r];
   for (const u of ms) { if (e.gone || e.c !== tgtHex[0] || e.r !== tgtHex[1]) break; const w = mode === 'fire' ? CW.canFire(G, M, u, e) : CW.canAssault(G, M, u, e); if (w) { why = why || `${u.name}: ${w}`; continue; }
@@ -42,7 +42,7 @@ function groupAttack(e, shift) { const mode = shift && G.attackMode === 'fire' ?
     setTimeout(() => CW.playCombat(G, u, e, res, from), n * 450); all.rep.push(...res.rep); if (res.arc !== 'front') all.arc = res.arc; if (res.result) all.result = res.result; n++; }
   if (!n) return toast(why || 'No battalion in this brigade can attack that target');
   G.undo = []; refreshVis(); CW.report(G, all, { name: `${G.sel.bdeName || G.sel.divName} (${n} unit${n > 1 ? 's' : ''})` }, e); selectGroup(G.sel); afterBrigade(G.sel, n * 450 + 1400); }
-function tryAttack(e, shift) { const u = G.sel, mode = shift && G.attackMode === 'fire' ? 'assault' : G.attackMode;
+function tryAttack(e, shift) { G.anim = null; const u = G.sel, mode = shift && G.attackMode === 'fire' ? 'assault' : G.attackMode;
   const why = mode === 'fire' ? CW.canFire(G, M, u, e) : CW.canAssault(G, M, u, e); if (why) { toast(why); return; }
   const from = [u.c, u.r], res = mode === 'fire' ? CW.resolveFire(G, M, u, e) : CW.resolveAssault(G, M, u, e, mode === 'charge');
   G.units.forEach(x => delete x._left); G.undo = []; refreshVis(); CW.playCombat(G, u, e, res, from); CW.report(G, res, u, e); select(u.gone ? null : u);
@@ -190,7 +190,7 @@ function draw() { if (G.aiBusy && !G._view) return asViewer(draw);
   const ownSel = !!(G.sel && G.sel.side === G.side && G._view !== 1 && G.group);
   if (ownSel) footprint(G.group.filter(x => !x.gone && x.type !== 'ldr' && x.type !== 'hq'), pulse);
   const unitList = G.units.filter(u => !u.gone && shown(u)).sort((a, b) => a.r - b.r);
-  const posOf = u => { let [x, y] = CW.center(u.c, u.r); if (u.type === 'ldr') { x += R * .38; y -= R * .3; } else { const st = CW.bodiesAt(G.units, u.c, u.r); if (st.length > 1) { const i = st.indexOf(u); x += (i ? 1 : -1) * R * .22; y += (i ? 1 : -1) * R * .12; } } return [x, y]; };
+  const posOf = u => { let c = u.c, r = u.r; if (G.anim && G.anim.u === u) { c = G.anim.interpC; r = G.anim.interpR; } let [x, y] = CW.center(c, r); if (u.type === 'ldr') { x += R * .38; y -= R * .3; } else { const st = CW.bodiesAt(G.units, u.c, u.r); if (st.length > 1) { const i = st.indexOf(u); x += (i ? 1 : -1) * R * .22; y += (i ? 1 : -1) * R * .12; } } return [x, y]; };
   // ground marks under a unit: campfire glow, selected-hex outline, ready ring (these lie on the ground, so in 3D they go on the decal)
   const groundMarks = (u, x, y) => {
     if (u.rested && dark) { const g = cx.createRadialGradient(x + R * .4, y + R * .3, 1, x + R * .4, y + R * .3, R * .5); g.addColorStop(0, 'rgba(255,190,90,.9)'); g.addColorStop(1, 'rgba(255,120,30,0)'); cx.fillStyle = g; cx.beginPath(); cx.arc(x + R * .4, y + R * .3, R * .5, 0, 7); cx.fill(); }
@@ -266,8 +266,35 @@ function walk(u, path) { const before = new Set(G.vis); let spent = 0, halted = 
     spent += sc; if (u.type !== 'ldr') CW.attrition(G, M, u, sc, b); u.c = b[0]; u.r = b[1]; u.face = d; u.dug = 0; refreshVis();
     const spotted = [...G.vis].filter(id => !before.has(id));
     if (spotted.length) { halted = true; toast(`Enemy spotted: ${byId(spotted[0]).name}!${i < path.length - 1 ? ' Halting.' : ''}`); break; } }
-  u.mp = Math.max(0, Math.round((u.mp - spent) * 10) / 10); u.acted = 1; return halted; }
+  u.mp = Math.max(0, Math.round((u.mp - spent) * 10) / 10); u.acted = 1;
+  if (!halted && !G.aiBusy && G.opts.animMove !== false && path.length > 1) {
+    const dur = Math.max(120, Math.min(400, (path.length - 1) * 60));
+    G.anim = { u, path, t0: performance.now(), dur };
+    requestAnimationFrame(animMoveFrame);
+  }
+  return halted; }
 CW.walk = walk;
+// animation: smooth glide along path with ease-out, hold pause, then auto-select next
+function animMoveFrame() {
+  if (!G.anim) return;
+  try {
+    const a = G.anim, u = a.u, now = performance.now(), elapsed = now - a.t0;
+    if (elapsed >= a.dur) {
+      if (!a.holding) {
+        a.holding = true; a.holdT0 = now; draw();
+        return requestAnimationFrame(animMoveFrame);
+      }
+      if (now - a.holdT0 < 120) { draw(); return requestAnimationFrame(animMoveFrame); }
+      u.c = a.path[a.path.length - 1][0]; u.r = a.path[a.path.length - 1][1]; G.anim = null;
+      if (G.opts.autoNext && u.mp < 1) nextUnit(true); else select(u); return;
+    }
+    const t = elapsed / a.dur, t3 = 1 - (1 - t) * (1 - t) * (1 - t);
+    const idx = Math.floor(t3 * (a.path.length - 1)), frac = t3 * (a.path.length - 1) - idx;
+    const p0 = a.path[Math.min(idx, a.path.length - 1)], p1 = a.path[Math.min(idx + 1, a.path.length - 1)];
+    a.interpC = p0[0] + (p1[0] - p0[0]) * frac; a.interpR = p0[1] + (p1[1] - p0[1]) * frac;
+    draw(); requestAnimationFrame(animMoveFrame);
+  } catch (err) { console.error('animMoveFrame error', err); G.anim = null; draw(); }
+}
 function moveTo(h) {
   const u = G.sel, k = CW.key(...h); if (!G.reach || !G.reach.has(k)) return;
   snapshot(u); const halted = walk(u, G.reach.path(k)); if (halted) G.undo = [];
@@ -344,7 +371,7 @@ function formation() { if (G.group) { const ms = members().filter(u => CW.TYPES[
   const cost = CW.formCost(u); if (u.mp < cost) return toast(`Needs ${cost} MP to change formation`);
   snapshot(u); const old = CW.maxMP(u); u.form = f[(f.indexOf(u.form) + 1) % 2]; u.mp = Math.floor((u.mp - cost) / old * CW.maxMP(u)); u.dug = 0; u.acted = 1;
   if (G.opts.difficulty !== 'beginner') u.org = clamp(u.org - 2); toast(`${u.name}: ${CW.FORMN[u.form]}`); select(u); }
-async function rest() { if (G.group) { const ms = members().filter(u => !u.acted); if (!ms.length) return toast('Every battalion has already acted');
+async function rest() { G.anim = null; if (G.group) { const ms = members().filter(u => !u.acted); if (!ms.length) return toast('Every battalion has already acted');
     const lvl = await CW.modal(`<h2>Rest brigade (${ms.length} units)</h2><label>Resupply <select name="l">${CW.SUPPLY_LEVELS.map(l => `<option value="${l[0]}" ${l[0] === 'full' ? 'selected' : ''}>${l[1]} — about ${ms.reduce((t, u) => t + CW.supplyCost(u, l[0]).cost, 0)} supply</option>`).join('')}</select></label>`, [['Cancel', null], ['Rest', f => f.querySelector('[name=l]').value, 1]]);
     if (!lvl) return; ms.forEach(u => { CW.restUnit(G, M, u); CW.resupply(G, M, u, lvl); u.mp = 0; u.acted = 1; }); G.undo = []; toast('Brigade rests'); return selectGroup(G.sel); }
   const u = needOwn(); if (!u) return; if (u.acted) return toast('Only units that have not acted this turn can rest');
@@ -353,10 +380,10 @@ async function rest() { if (G.group) { const ms = members().filter(u => !u.acted
   const lvl = await CW.modal(`<h2>Rest & Resupply — ${u.name}</h2><div class="hint">The unit rests for the rest of the turn, gathering stragglers (order, health, effective men). ${CW.nearHQ(G, u) ? 'Near its Corps HQ: better rest. ' : ''}${cap !== 'over' ? `<b>${CW.adjEnemies(G, M, u)} enemy units adjacent limits resupply.</b>` : ''}</div>
     <label>Ammunition (${u.sp}/${CW.spMax(u)} rounds · Army Supply ${G.supply[G.side]}) <select name="l">${opts}</select></label>`, [['Cancel', null], ['Rest', f => f.querySelector('[name=l]').value, 1]]);
   if (!lvl) return; snapshot(u); CW.restUnit(G, M, u); const cost = CW.resupply(G, M, u, lvl); u.mp = 0; u.acted = 1; G.undo = []; toast(`${u.name} rests${cost ? ` · ${cost} supply spent` : ''}`); if (G.opts.autoNext) nextUnit(true); else select(u); }
-function dig() { if (G.group) { const ms = members().filter(u => !CW.canDig(M, u)); ms.forEach(u => { u.digging = 1; u.mp = 0; u.acted = 1; }); G.undo = []; toast(ms.length ? `${ms.length} units digging in` : 'No battalion can dig in here now'); return selectGroup(G.sel); }
+function dig() { G.anim = null; if (G.group) { const ms = members().filter(u => !CW.canDig(M, u)); ms.forEach(u => { u.digging = 1; u.mp = 0; u.acted = 1; }); G.undo = []; toast(ms.length ? `${ms.length} units digging in` : 'No battalion can dig in here now'); return selectGroup(G.sel); }
   const u = needOwn(); if (!u) return; const why = CW.canDig(M, u); if (why) return toast(why);
   u.digging = 1; u.mp = 0; u.acted = 1; G.undo = []; toast(`${u.name} is digging in — entrenched at end of turn`); if (G.opts.autoNext) nextUnit(true); else select(u); }
-function undo() { const s = G.undo.pop(); if (!s) return toast('Nothing to undo'); s.forEach(o => { const u = byId(o.id); Object.keys(u).forEach(k => delete u[k]); Object.assign(u, o); }); refreshVis(); if (G.group) selectGroup(byId(s[0].id)); else select(byId(s[0].id)); toast('Undone'); }
+function undo() { G.anim = null; const s = G.undo.pop(); if (!s) return toast('Nothing to undo'); s.forEach(o => { const u = byId(o.id); Object.keys(u).forEach(k => delete u[k]); Object.assign(u, o); }); refreshVis(); if (G.group) selectGroup(byId(s[0].id)); else select(byId(s[0].id)); toast('Undone'); }
 // Tab / Shift+Tab: step through the battalions of this brigade that can still move or fire, then on to the next brigade
 // classic (CWG2) cycling: step through every regiment/battery that can still move or fire
 function classicNext(dir = 1) { const act = mine().filter(x => x.type !== 'ldr' && x.type !== 'hq' && canActNow(x) && !x.skip), n = act.length;
@@ -451,7 +478,7 @@ cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, c
     if (h && !here.some(o => o.side !== G.side)) orderDrag = { a: toWorld(e), cache: {} }; } });
 window.addEventListener('pointerup', e => { const od = orderDrag; orderDrag = null;
   if (od && od.dragging) { drag = null; const L = G.sel; CW.ORD.issue(L, od.a, toWorld(e)); afterBrigade(L); return; }
-  if (drag && !drag.moved && e.target === cv) click(e, drag.btn); drag = null; draw(); });
+  if (drag && !drag.moved && e.target === cv) { if (G.anim) { G.anim = null; } click(e, drag.btn); } drag = null; draw(); });
 cv.addEventListener('pointermove', e => {
   if (orderDrag && drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.hypot(dx, dy) > 8) { orderDrag.dragging = drag.moved = true; }
     if (orderDrag.dragging) { orderDrag.pv = CW.ORD.preview(G.sel, orderDrag.a, toWorld(e), false, orderDrag.cache); draw(); return; } }
@@ -476,7 +503,7 @@ function click(e, btn) {
     if (!CW.CLASSIC && G.opts.bdeMode && u.side === G.side && u.bde && !u.detached && !e.altKey && CW.ORD) { const L = CW.ORD.colonelOf(G.units, u); if (L) { selectGroup(L); toast(`${u.bdeName} — Option-click to handle ${u.name} on its own`); return; } }
     select(u); if (u.side !== G.side) toast('Enemy unit'); } else select(null);
 }
-window.addEventListener('keydown', e => { if (e.metaKey || e.ctrlKey || e.altKey) return; if (CW.isModal()) { if (e.key === 'Escape' && G.started) CW.closeModal(); return; }
+window.addEventListener('keydown', e => { if (G.anim) { G.anim = null; draw(); return; } if (e.metaKey || e.ctrlKey || e.altKey) return; if (CW.isModal()) { if (e.key === 'Escape' && G.started) CW.closeModal(); return; }
   if (e.key === 'Escape') return select(null); if (e.key === 'Tab') { e.preventDefault(); if (G.started && !G.aiBusy) nextActor(e.shiftKey ? -1 : 1); return; } const k = e.key === ' ' ? ' ' : e.key.toUpperCase(); if (k.length === 1) { if (k === ' ') e.preventDefault(); CW.act(k); } });
 function fit() { const w = cv.clientWidth, h = cv.clientHeight, dpr = window.devicePixelRatio || 1; cv.width = w * dpr; cv.height = h * dpr; cx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (!G.cam.init && w) { const L = G.opts.roster ? 246 : 0; G.cam.z = Math.min((w - L) / MW, h / MH); G.cam.x = L + (w - L - MW * G.cam.z) / 2; G.cam.y = (h - MH * G.cam.z) / 2; G.cam.init = 1; } draw(); }
@@ -498,7 +525,7 @@ function newGame(side, difficulty, opp = 'ai') {
   Object.assign(G, { opp, over: 0, aiBusy: 0, aiMem: null, units: CW.buildArmy(M, window.OOB_DEMO), reinf: structuredClone(window.REINF_DEMO), obj: structuredClone(M.objectives || []), cas: { CS: 0, US: 0 }, side: 'CS', player: side, turn: 1, minutes: 480, weather: 'clear', supply: { CS: 400, US: 600 }, morale: { CS: 50, US: 50 }, endAt: 2160 });
   G.opts.difficulty = difficulty; CW.saveOpts(G.opts); G.started = true; armyView(); if (is3D()) CW.R3.sweep(G.cam, fitZoom(), draw); startSideTurn();
 }
-function loadState(s) { Object.assign(G, { opp: s.opp || 'hotseat', over: 0, aiBusy: 0, aiMem: s.aiMem || null, obj: s.obj || structuredClone(M.objectives || []), cas: s.cas || { CS: 0, US: 0 }, units: s.units, reinf: s.reinf || [], side: s.side, player: s.player || s.side, turn: s.turn, minutes: s.minutes, weather: s.weather, supply: s.supply, morale: s.morale, endAt: s.endAt || 2160 });
+function loadState(s) { Object.assign(G, { opp: s.opp || 'hotseat', over: 0, aiBusy: 0, aiMem: s.aiMem || null, obj: s.obj || structuredClone(M.objectives || []), cas: s.cas || { CS: 0, US: 0 }, units: s.units, reinf: s.reinf || [], side: s.side, player: s.player || s.side, turn: s.turn, minutes: s.minutes, weather: s.weather, supply: s.supply, morale: s.morale, endAt: s.endAt || 2160, anim: null });
   G.started = true; G.undo = []; refreshVis(); select(null); armyView(); if (is3D()) CW.R3.sweep(G.cam, fitZoom(), draw); toast(`Loaded · ${CW.fmtTime(G.minutes)}`); if (isAI(G.side)) { setTimeout(runAI, 900); return; } if (G.opts.autoNext) setTimeout(() => { if (!G.sel && !CW.isModal()) nextBrigade(null); }, 900); }
 async function boot() {
   G.started = false; draw();
