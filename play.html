@@ -17,8 +17,11 @@ body{display:flex;flex-direction:column;font-family:'Libre Baskerville',Georgia,
 #wrap{flex:1;position:relative;min-height:0}
 #gl{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
 #map{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair;touch-action:none}
-#panel{height:196px;display:grid;grid-template-columns:150px 1fr 290px;gap:10px;padding:10px 12px;background:repeating-linear-gradient(92deg,#4a3322 0 7px,#442e1e 7px 13px,#4f3726 13px 22px);border-top:3px solid #9c7a33}
-.box{border-radius:6px;padding:8px 10px;overflow:auto;background:rgba(20,12,6,.45);border:1px solid #8a6a2c;box-shadow:inset 0 0 12px rgba(0,0,0,.5)}
+#panel{height:clamp(250px, 31vh, 310px);display:grid;grid-template-columns:150px 1fr 290px;gap:10px;padding:10px 12px;background:repeating-linear-gradient(92deg,#4a3322 0 7px,#442e1e 7px 13px,#4f3726 13px 22px);border-top:3px solid #9c7a33}
+.box{border-radius:6px;padding:8px 10px;overflow:auto;background:rgba(20,12,6,.45);border:1px solid #8a6a2c;box-shadow:inset 0 0 12px rgba(0,0,0,.5);scrollbar-width: thin; scrollbar-color: #9c7a33 rgba(20,12,6,.6); }
+.box::-webkit-scrollbar { width: 10px; }
+.box::-webkit-scrollbar-track { background: rgba(20,12,6,.6); border-radius: 4px; }
+.box::-webkit-scrollbar-thumb { background: #9c7a33; border-radius: 4px; }
 .portrait{width:74px;height:84px;border-radius:4px;margin:0 auto 4px;display:block}
 .lname{font-size:13px;text-align:center;line-height:1.2}.swords{text-align:center;font-size:13px}
 h3{margin:0 0 2px;font-size:16px}.sub{font-size:12px;opacity:.85;margin-bottom:4px;line-height:1.45}.small{font-size:11px;opacity:.85;margin-bottom:6px}.muted{opacity:.7;font-size:13px}
@@ -27,6 +30,7 @@ h3{margin:0 0 2px;font-size:16px}.sub{font-size:12px;opacity:.85;margin-bottom:4
 .bar{flex:1;height:8px;border-radius:4px;overflow:hidden;background:rgba(0,0,0,.25)}.bar i{display:block;height:100%}
 .tri{display:flex;height:10px;border-radius:3px;overflow:hidden;margin:4px 0 2px}.tri i{display:block;height:100%}
 .btns{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.btns { position: sticky; bottom: 0; background: #2a1d13; padding: 8px 0; margin: 0 -10px -8px -10px; padding: 8px 10px; border-top: 1px solid #6b5327; }
 .btns button{font:inherit;font-size:12px;padding:3px 8px;border-radius:4px;cursor:pointer;background:linear-gradient(#e2c27a,#a8843a);border:1px solid #5a441a;color:#23170a}
 .tname{font-size:15px;font-weight:700;margin-bottom:4px}.tline{font-size:12px;line-height:1.55}
 #toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);padding:8px 14px;border-radius:6px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;background:rgba(20,12,6,.88);border:1px solid #9c7a33;color:#f1e4c6}

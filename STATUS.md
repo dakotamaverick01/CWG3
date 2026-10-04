@@ -271,3 +271,33 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Haze: the existing fog colour and the ground light both shift slightly warmer and back on a ~60 s cycle (`warmFog` + `cwWarm` in the shader); back to the base colour when the option is off.
 - Checked in a local browser (no Node or test_3d.js / test_hover.js on this Mac; those scripts lived in the cloud session and were **not run**): Millbrook loads, forest mask 318×179 with 6,744 forest pixels, no shader or console errors, ground render ≈1.1 ms on vs ≈1.5 ms off (GPU, so it's noise). Between frames ~1 s apart about 4.5% of pixels change (canopies + water). The in-app preview pane throttles rAF, so the 40 ms slow-guard switched the effect off there; it was muted for the screenshot only. Shots: docs/shots/17b_before_off.jpg / 17b_after_on.jpg (stills, so the sway itself doesn't show).
 - To do next session: run test_3d.js and test_hover.js where Node + headless Chrome are available.
+
+## Session 17c — living landscape safeguard fix
+- src/render3d.js tick() function: fixed initialization of S.win0 statement that was getting swallowed in a comment
+- Skip samples where dt > 100ms to avoid single stall events triggering false positives
+- Raised slow threshold from 40ms to 55ms (more tolerant for normal variation)
+- Implemented slowCount: only trigger onSlow after TWO consecutive slow 3-second windows (prevents one bad frame from turning off living landscape)
+- Commit: c2878f4 (after 17d, part of batch)
+
+## Session 17d — move animation
+- src/game.js: implemented smooth unit movement animation with visual-only glide along path
+- G.anim object tracks animation state: unit, path, timestamps, interpolated coordinates
+- animMoveFrame() RAF loop: ease-out cubic timing (1 - (1-t)³), 60ms per hex (min 120ms, max 400ms total)
+- posOf() modified to interpolate unit position during animation
+- 120ms hold pause after animation completes showing arrival hex with subtle gold pulse
+- Auto-select-next delayed until animation+hold finish (if autoNext enabled and unit has <1 MP)
+- Animation cancellation: any click or keypress during animation cancels instantly and executes the action
+- G.anim cleared on: undo, load, combat, rest/dig-in to prevent state corruption
+- G.opts.animMove option (default ON, can be toggled in Options)
+- Try/finally wrapper prevents G.anim getting stuck on frame errors
+- Commit: c2878f4 "Session 17d: move animation"
+- Test plan: (a) move unit 4+ hexes to see smooth glide, (b) move with enemy spotted mid-path halts, (c) click rapidly during animation cancels and executes click, (d) press undo after move, (e) toggle Animate moves in Options, (f) hover units/check console for errors
+
+
+## Session 17e — CSS: bottom panel height & scrollbar styling ✅
+- play.html CSS fixes for #panel (bottom info box):
+  1. Changed height from fixed 196px to clamp(250px, 31vh, 310px) so it scales responsively but stays usable
+  2. Added scrollbar styling to .box: Firefox (scrollbar-width: thin; scrollbar-color) and webkit (Chrome/Safari) rules with brass/walnut theme colors (#9c7a33 thumb, dark bg)
+  3. Added position: sticky; bottom: 0 to .btns to keep Formation/Rest/Dig-in/Skip buttons visible while stats scroll above
+  4. Verified no hardcoded 196px references in game.js or hud.js (none found)
+- All CSS changes reviewed in git diff; no JavaScript changes
