@@ -11,7 +11,7 @@ CW.WAKE = (function () {
   const N = 256, RATE = 60, MAXSTEPS = 4, MAXD = 8;
   // K: neighbour pull (wave speed ~ sqrt(K/4) cells/step); ADV: downstream drift, cells/step; DV/DH: per-step damping of
   // velocity/height (a drop is gone in ~2 s); EDGE: velocity damping on bank cells (weak reflection); AMB: faint flow pulses
-  const P = { K: 0.12, ADV: 0.20, DV: 0.996, DH: 0.997, EDGE: 0.95, R: 2.0, AMB: 0.03, AMB_EVERY: 0.22 };   // tuned session 18 (sim_test)
+  const P = { K: 0.12, ADV: 0.20, DV: 0.996, DH: 0.997, EDGE: 0.95, R: 2.0, AMB: 0.12, AMB_EVERY: 0.10 };   // tuned session 18 (sim_test)
   let ren = null, scene, cam, quad, mat, rtA, rtB, mask = null, ok = false, gw = 0, gh = 0, cell = 1, acc = 0, quiet = 99, ambT = 0;
   let pts = null, segs = [], rw = 0;
   const box = { x0: 0, y0: 0, w: 1, h: 1, hMin: 0, hMax: 0 }, drops = [];
