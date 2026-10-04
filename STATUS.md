@@ -257,3 +257,11 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - New: fxs_/fxc_/fxf_ (musket smoke, cannon smoke + dust, flashes/fire), gda/gdb/gdc_ (27 ground details), lma–lme_ (45 buildings), tp_ (telegraph, flagpole, well, pump, gate…), slpa/slpb (slope, rock, scree, creek-bank ground), crpa/crpb (summer corn, wheat, hay windrows, plowed). 80 ground textures, 344 props, art.js ≈19 MB (watch this: split effects/buildings into their own file next).
 - Portraits: +9 varied CS (cs_25–33). Skipped for now: 34 dawn sky, 40 winter ground (files kept in batch4).
 - render_art.js: crop fields use the green summer wheat/corn. Known: store signs on lmb/lmc carry painted words (tiny at game size).
+
+## Session 17a (4 Oct) — Living landscape: cloud shadows + water flow ✅ (daytime summer only)
+- render3d.js: both effects are patched into the existing ground material (onBeforeCompile), no new layers. One time uniform `uT` drives both; the board-edge countryside gets the clouds too.
+  - Cloud shadows: 4-octave noise made in the shader, drifting slowly from the west; ground at most 18% darker, lit patches slightly warmer.
+  - Water flow: 1/4-scale mask (RG = flow direction, A = water) built once per map load from the river and creek paths the painter now records in `CW.WATER` (render_art.js, data only; hex fallback when art isn't loaded). Ripples + gold twinkles scroll downhill along the flow; nothing outside the mask changes. Scratch canvases released after building.
+- Loop: 30 fps cap, re-renders only the WebGL ground (decal and unit canvas untouched), stops when hidden / flat map / option off. Average frame time > 40 ms for 3 s → option switched off + toast. Shader compile error → effects off, map still drawn.
+- Options → "Living landscape" (default ON), saved with the other options.
+- Tests (headless, software WebGL): 3D picking/select/move/tilt/pan/zoom/overview, flat toggle (key 3) stops the loop and back, option off/on, hover every unit at 2× (clean transform), player-vs-AI turn, auto-off toast: no console errors. Ground render cost in software GL: 1137 ms off vs 1228 ms on (≈ +8%; real GPU is far faster). Shots: docs/shots/17a_before_off.png / 17a_after_on.png.

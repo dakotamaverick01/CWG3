@@ -123,6 +123,7 @@ CW.prop = function (ctx, name, x, y, w, flip = false, rot = 0) {
 };
 
 CW.paintArtFeatures = function (ctx, M, rand, pat, wet) {
+  CW.WATER = { river: null, rw: 0, streams: [] };   // session 17a: water paths recorded for the 3D flow mask (data only)
   const R = CW.R, P = CW.prop, each = (t, fn) => M.all.forEach(([c, r]) => { if (M.ter(c, r) === t) fn(...CW.center(c, r), c, r); }), sprites = [];
   const put = (y, fn) => sprites.push([y, fn]); // upright objects, drawn back-to-front after the flat stuff
   // crop rows: painted wheat strokes
@@ -140,7 +141,7 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet) {
   // river: muddy banks, deep water, golden sky reflections
   const riv = M.all.filter(([c, r]) => 'wbd'.includes(M.ter(c, r))).map(h => CW.center(...h)).sort((a, b) => a[1] - b[1]);
   if (riv.length) { riv.unshift([riv[0][0], riv[0][1] - R * 1.4]); riv.push([riv[riv.length - 1][0], riv[riv.length - 1][1] + R * 1.4]);
-    const rw = R * .46; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const rw = R * .46; CW.WATER.river = riv.map(p => p.slice()); CW.WATER.rw = rw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const RW = !!CW.ARTI.ground.water_1;                                                   // batch 2: painted river water + mud banks
     CW.smoothPath(ctx, riv); ctx.strokeStyle = pat(RW ? 'water_2' : 'mud_0', 0, 0, 0, .3); ctx.lineWidth = rw + 16; ctx.stroke();
     ctx.strokeStyle = 'rgba(40,30,15,.35)'; ctx.lineWidth = rw + 5; ctx.stroke();
@@ -167,7 +168,7 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet) {
       // meander: subdivide and push sideways with a slow wave + jitter
       const mp = []; for (let k = 0; k < pts.length - 1; k++) { const [a, b] = [pts[k], pts[k + 1]], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
         for (let u = 0; u < 3; u++) { const f = u / 3, v = (k * 3 + u) * .38 + i, w = (Math.sin(v) * .6 + Math.sin(v * 2.3 + 1) * .3) * R * .22 + (rand() - .5) * R * .06; mp.push([a[0] + dx * f - dy / L * w, a[1] + dy * f + dx / L * w]); } }
-      mp.push(pts[pts.length - 1]); pts = mp; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      mp.push(pts[pts.length - 1]); pts = mp; CW.WATER.streams.push(pts); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       const WG = CW.ARTI.ground.water_0 ? [[pat('water_2', 0, 0, 0, .2), 9], ['rgba(40,30,15,.3)', 6], [pat('water_0', 0, 0, 0, .2), 4.4], ['rgba(53,96,111,.55)', 3], ['rgba(140,185,190,.45)', 1.3], ['rgba(255,214,150,.3)', .8]]   // batch 2: mud bank + pebbly water
         : [['rgba(60,45,20,.45)', 8], ['#35606f', 4.2], ['rgba(110,160,165,.7)', 2], ['rgba(255,214,150,.35)', .8]];
       for (const [col, w] of WG) { CW.smoothPath(ctx, pts); ctx.strokeStyle = col; ctx.lineWidth = w; ctx.stroke(); }

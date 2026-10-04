@@ -8,6 +8,7 @@ CW.M = M;
 const cv = document.getElementById('map'), sx = cv.getContext('2d'), mapCache = {}, glc = document.getElementById('gl');
 let cx = sx;   // cx = where the current layer draws: the screen, or (3D battlefield) the markings decal laid over the hills
 if (CW.R3 && glc) CW.R3.init(M, glc);
+if (CW.R3 && CW.R3.onSlow) CW.R3.onSlow(ms => { G.opts.living = false; CW.saveOpts(G.opts); CW.R3.setLive(false); draw(); toast(`Living landscape switched off: frames were taking ${Math.round(ms)} ms. Turn it back on in Options`); });
 const is3D = CW.is3D = () => !!(CW.R3 && CW.R3.on(G.opts));
 const $ = id => document.getElementById(id), byId = id => G.units.find(u => u.id === id), mine = () => G.units.filter(u => u.side === G.side && !u.gone);
 const clamp = v => Math.max(0, Math.min(99, Math.round(v)));
@@ -144,6 +145,7 @@ function draw() { if (G.aiBusy && !G._view) return asViewer(draw);
   // start every frame from a clean slate, so one failed frame can never leave the canvas shifted or faded for the next
   cx = sx; const dpr = window.devicePixelRatio || 1; cx.setTransform(dpr, 0, 0, dpr, 0, 0); cx.globalAlpha = 1; cx.globalCompositeOperation = 'source-over'; if ('filter' in cx) cx.filter = 'none';
   const w = cv.clientWidth, h = cv.clientHeight, D3 = G.started && is3D(); if (glc) glc.style.display = D3 ? 'block' : 'none';
+  if (CW.R3 && CW.R3.setLive) CW.R3.setLive(D3 && G.opts.living !== false);   // session 17a: living landscape loop (30 fps cap)
   if (D3) cx.clearRect(0, 0, w, h); else { cx.fillStyle = '#2b2418'; cx.fillRect(0, 0, w, h); } if (!G.started) return;
   const ph = CW.phase(G.minutes), contact = G.contact = inContact();
   // 3D: markings go onto the decal (map pixels, no camera); flat: everything goes on screen under the 2D camera
