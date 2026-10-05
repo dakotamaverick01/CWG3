@@ -326,3 +326,7 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Shots: docs/shots/19_creek_still.jpg (living off), 19_creek_living_wade.jpg (regiment in Lyle's Ford), 19_creek_closeup.jpg.
 - Tuning knobs (render3d RIB_FS): uFps (flow speed), nt scales (ripple strength), body/sky colours, fresnel clamp 0.6. Re-render water: tools/water/flow.py then atlas.py.
 - Not done: the brooks are still painted + thread (could get the same ribbon); bridges/fords cut the ribbon by distance only.
+
+## Session 19b (5 Oct) — wheat in Blender (preview, awaiting John's approval)
+- tools/wheat/wheat.py: headless Blender renders a seamless looping wheat field (5,200 stalks per tile, wind gust rolling west to east, low western sun). 48 frames, 256 px, ~7 s/frame. Preview sent; not in the game yet.
+- Queued for the next water pass: creek flow is a little fast (John), so lower uFps / slide speed.
