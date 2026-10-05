@@ -333,3 +333,10 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - In game: assets/art/wheat_flow.js (8x6 flipbook, 128 px cells, ~0.6 MB) + render3d.js ground shader. Wheat hexes (crop hexes the painter made wheat, not corn; roads cut out) multiply the painted wheat by the flipbook (colour / its average) at 12 fps. Two samples (64 px and 97 px tiles, different frame offsets) so the gust bands don't repeat every tile; the gust phase also drifts across a field. Living off = still frame. Fades back to the painting when zoomed far out (no shimmer).
 - Shot: docs/shots/19b_wheat_living.jpg. Next: corn with the same pipeline (tools/wheat/wheat.py with corn geometry).
 - NEXT SESSION (John, 5 Oct): Living landscape must default ON. It was off on his Mac (the slow-frame auto-off saves living=false, so it stays off). Fix: reset the saved option to on at load (or stop auto-off from persisting) and show a toast if it auto-switches off.
+
+## NEXT SESSION — John's notes (5 Oct night), all small fixes
+1. Unit move animation too fast / sometimes skipped. Cause: dur = 60 ms/hex (120–400 ms), and no glide when an enemy is spotted mid-move (halted) or on the computer's turn (aiBusy). Fix: ~220 ms/hex (350–1400 ms), glide to the halt hex too, glide AI moves one at a time.
+2. Water + wheat too fast/distracting: just look alive. Creek uFps 16 → ~6, wheat 12 → ~5, wake drift ADV lower; brook thread slower.
+3. Feels sluggish in the browser. Likely: Retina renders 4× pixels (cap WebGL pixel ratio ~1.5), living loop capped at 30 fps (allow 60 when fast), whole 2D unit canvas redrawn each frame. Profile on the Mac first.
+4. Living landscape default ON (see above).
+5. Wire title art: assets/incoming/title/30_title (load), 31_menu (menu), 32_outcomes (after-action; crop captions + fake signatures), 30b_title_alt spare.
