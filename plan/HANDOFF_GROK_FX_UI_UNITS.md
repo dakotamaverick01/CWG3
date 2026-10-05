@@ -69,4 +69,4 @@ A 3 by 3 grid sprite sheet of nine separate American Civil War units on a plain 
 ---
 
 ## Order if you run short on Grok uses
-40 → 45 → 50 → 51 → 41 → 46 → 52 → 42 → 47
+SKIP 40–42 (smoke now comes from the free Kenney pack). Order: 45 → 50 → 51 → 46 → 52 → 47

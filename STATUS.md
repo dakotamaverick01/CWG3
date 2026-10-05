@@ -347,3 +347,8 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Smoother: 3D board capped at 1.5× pixel ratio on Retina (~44% fewer pixels to draw). If it still feels slow, profile on the Mac next (30 fps living cap, full unit-canvas redraws).
 - Living landscape: forced ON once for everyone (cwg3.liv19 flag); the slow-frame guard now turns it off for the session only and no longer saves it.
 - Headless check: move + wake test, wheat/creek probe — no errors.
+
+## Battle smoke source decided (5 Oct, from Grok's suggestion)
+- Kenney Smoke Particles (CC0) downloaded: assets/incoming/kenney_smoke_cwg3.zip (White puff 25, Black smoke 25, Explosion 9, Flash 9; skipped the novelty set). Credited in ASSET_CREDITS.md.
+- Plan: volley = 3–4 white-puff frames growing and fading, normal alpha blend (additive would blow out on the sunlit board), slightly warm-tinted; cannon = 1 flash frame (additive) + 2 white puffs; shell/ground burst = explosion frames tinted brown/grey. Drawn on the unit layer, never baked into the map.
+- Grok sheets 40–42 (smoke/fire) no longer needed; keep Grok for 45–47 interface and 50–52 unit figures.

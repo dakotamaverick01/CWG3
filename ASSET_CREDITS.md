@@ -14,3 +14,5 @@ Every outside asset gets a row before it's used. Only CC0, CC-BY, OFL, public do
 | Trees, woods/orchard, CS + US facings, fieldstone walls, wheat + corn fields, CS + US cavalry, commanders, CS + US artillery, road + water + parchment textures, creek/road props, UI frames (assets/incoming 11–27 → assets/art) | Live map | Generated with Grok Imagine (xAI) via Claude in Chrome, processed by tools/intake.py | AI-generated for this project (own use under xAI terms) | — |
 | scipy / numpy / Pillow (intake tool only, not shipped) | tools/intake.py | PyPI | BSD / MIT-CMU | — |
 | three.js 0.186.1 (shipped: src/vendor/three.min.js) | 3D battlefield renderer (tilted map, sun, haze) | threejs.org | MIT | © three.js authors; license header kept in file |
+
+| Kenney Smoke Particles (white puff, black smoke, explosion, flash) | kenney.nl/assets/smoke-particles | CC0 | Battle smoke/flash FX (session 20) |
