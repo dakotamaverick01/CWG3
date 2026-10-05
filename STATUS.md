@@ -352,3 +352,9 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Kenney Smoke Particles (CC0) downloaded: assets/incoming/kenney_smoke_cwg3.zip (White puff 25, Black smoke 25, Explosion 9, Flash 9; skipped the novelty set). Credited in ASSET_CREDITS.md.
 - Plan: volley = 3–4 white-puff frames growing and fading, normal alpha blend (additive would blow out on the sunlit board), slightly warm-tinted; cannon = 1 flash frame (additive) + 2 white puffs; shell/ground burst = explosion frames tinted brown/grey. Drawn on the unit layer, never baked into the map.
 - Grok sheets 40–42 (smoke/fire) no longer needed; keep Grok for 45–47 interface and 50–52 unit figures.
+
+## Session 20 (5 Oct) — battle smoke sprites ✅
+- assets/art/smoke_fx.js: 13 Kenney Smoke Particles frames (CC0) in a 512 px atlas: 6 warm-white powder puffs, 4 explosion frames tinted to earth/dust, 3 flashes.
+- src/fx.js: smoke/flash/burst use the sprites when loaded (old code-drawn version stays as fallback). Volley = bank of 6 puffs that bloom, drift downwind and thin out (2.4 s); flash = additive glow; shell burst = 3 dust clouds + a quick flash; guns also leave a puff bank (2.6 s).
+- Known: effects draw on the ground layer, so figures sit on top of the smoke. Next: draw smoke above the units for depth.
+- Headless check: sprites render, no errors.
