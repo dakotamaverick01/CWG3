@@ -8,8 +8,8 @@ CW.R3 = (function () {
   const EX = 30, FOV = 30, TILT_MIN = 40, TILT_MAX = 80, TILT_DEF = 58;   // EX = height of one level in map px (hex radius 44)
   let ok = false, failed = false, ren, scene, cam, dcv, dctx, dtex, ttex, terrainSrc = null, M, MW, MH, HW, HH, HF, glc;
   const S = { tilt: TILT_DEF, anim: null, last: null, live: false, raf: 0, prev: 0, acc: 0, n: 0, win0: 0, mats: [], wk: new Map(), src: null, threads: null };
-  // ---------- living landscape (sessions 17a-b, 18, 19): cloud shadows, 3D creek + wake, brook thread, tree sway, warm haze; one time uniform, patched into the ground material ----------
-  const U = { uT: { value: 0 }, uLive: { value: 0 }, uWater: { value: null }, uForest: { value: null }, uMap: { value: window.THREE ? new THREE.Vector2(1, 1) : null } };
+  // ---------- living landscape (sessions 17a-b, 18, 19): cloud shadows, 3D creek + wake, wind in the wheat, brook thread, tree sway, warm haze; one time uniform, patched into the ground material ----------
+  const U = { uT: { value: 0 }, uLive: { value: 0 }, uWater: { value: null }, uForest: { value: null }, uWheatM: { value: null }, uWheatA: { value: null }, uWheatAvg: { value: window.THREE ? new THREE.Vector3(.31, .22, .084) : null }, uWheatOn: { value: 0 }, uMap: { value: window.THREE ? new THREE.Vector2(1, 1) : null } };
   const GLSL_NOISE = `
     float cwH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float cwN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -20,7 +20,7 @@ CW.R3 = (function () {
     mat.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, U, CW.WAKE ? CW.WAKE.U : {});
       sh.vertexShader = 'varying vec3 vCwW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vCwW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      sh.fragmentShader = `varying vec3 vCwW; uniform float uT, uLive; uniform sampler2D uWater, uForest, uWake; uniform vec2 uMap, uWTx; uniform vec4 uWBox;${GLSL_NOISE}\n` + sh.fragmentShader
+      sh.fragmentShader = `varying vec3 vCwW; uniform float uT, uLive; uniform sampler2D uWater, uForest, uWake, uWheatM, uWheatA; uniform vec2 uMap, uWTx; uniform vec4 uWBox; uniform vec3 uWheatAvg; uniform float uWheatOn;${GLSL_NOISE}\n` + sh.fragmentShader
         .replace('#include <map_fragment>', (water ? `
   // tree sway: inside the forest mask only, the painted canopies wobble 1-2 px (slow sine + noise); roads, walls and open ground stay put
   vec2 cwOff = vec2(0.0);
@@ -29,7 +29,20 @@ CW.R3 = (function () {
       cwOff = fm * 1.6 * vec2(sin(uT * 0.9 + vCwW.x * 0.031 + n), 0.5 * sin(uT * 0.7 + vCwW.z * 0.027 + n)) / uMap; } }
   #ifdef USE_MAP
     diffuseColor *= texture2D(map, vMapUv + cwOff);
-  #endif` : '#include <map_fragment>') + `
+  #endif
+  // session 19b: wheat fields carry a Blender-rendered flipbook of stalks bending in the wind (CW.WHEATFLOW); it multiplies the
+  // painted wheat (colour / its average), the gust phase drifts across a field so tiles don't repeat in step, fades out when zoomed far out
+  if (uWheatOn > 0.5) { vec2 wmp = vCwW.xz + uMap * 0.5; float wq = texture2D(uWheatM, wmp / uMap).a;
+    if (wq > 0.01) { float wk = wq * (1.0 - smoothstep(0.9, 2.2, length(fwidth(wmp))));
+      if (wk > 0.0) { float ft = (uLive > 0.5 ? uT * 12.0 : 0.0) + cwN(wmp / 260.0) * 24.0, f0 = mod(floor(ft), 48.0), f1 = mod(f0 + 1.0, 48.0);
+        // two samples at unrelated scales/phases, so the gust bands interfere instead of repeating every tile
+        vec2 q = fract(wmp / 64.0) * 0.98 + 0.01, q2 = fract(wmp / 97.0 + vec2(0.31, 0.57)) * 0.98 + 0.01; float g0 = mod(f0 + 17.0, 48.0), g1 = mod(f1 + 17.0, 48.0);
+        vec3 wa = texture2D(uWheatA, vec2((mod(f0, 8.0) + q.x) / 8.0, 1.0 - (floor(f0 / 8.0) + 1.0 - q.y) / 6.0)).rgb;
+        vec3 wb = texture2D(uWheatA, vec2((mod(f1, 8.0) + q.x) / 8.0, 1.0 - (floor(f1 / 8.0) + 1.0 - q.y) / 6.0)).rgb;
+        vec3 wc = texture2D(uWheatA, vec2((mod(g0, 8.0) + q2.x) / 8.0, 1.0 - (floor(g0 / 8.0) + 1.0 - q2.y) / 6.0)).rgb;
+        vec3 wd = texture2D(uWheatA, vec2((mod(g1, 8.0) + q2.x) / 8.0, 1.0 - (floor(g1 / 8.0) + 1.0 - q2.y) / 6.0)).rgb;
+        vec3 wt = sqrt(mix(wa, wb, fract(ft)) * mix(wc, wd, fract(ft)));
+        diffuseColor.rgb *= mix(vec3(1.0), clamp(wt / uWheatAvg, 0.0, 2.2), wk * 0.85); } } }` : '#include <map_fragment>') + `
   float cwSheen = 0.0, cwWarm = 0.0;
   if (uLive > 0.5) {
     cwWarm = 0.5 + 0.5 * sin(uT * 0.10472);   // ~60 s sun-warmth cycle, shared with the fog colour (tick)
@@ -168,6 +181,20 @@ CW.R3 = (function () {
     if (U.uForest.value) U.uForest.value.dispose();
     const t = new THREE.DataTexture(d, w, h, THREE.RGBAFormat); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; U.uForest.value = t;
   }
+  // wheat mask at 1/8 scale (A), once per map load: crop hexes that the painter made wheat (not corn), roads cut out; then load the flipbook once
+  function buildWheat() {
+    if (!window.CW.WHEATFLOW || !CW.cropKind) return; const K = CW.cropKind(M), q = 8, w = Math.ceil(MW / q), h = Math.ceil(MH / q); let A = document.createElement('canvas'); A.width = w; A.height = h;
+    const a = A.getContext('2d'); a.filter = 'blur(1px)'; a.scale(1 / q, 1 / q); a.fillStyle = '#fff';
+    M.all.forEach(([c, r]) => { if (M.ter(c, r) === 'c' && K.get(c + ',' + r) !== 'corn') { const [x, y] = CW.center(c, r); CW.hexPath(a, x, y, CW.R * .98); a.fill(); } });
+    a.filter = 'none'; a.globalCompositeOperation = 'destination-out'; a.strokeStyle = '#000'; a.lineCap = a.lineJoin = 'round';
+    (M.roads || []).forEach(rd => { CW.smoothPath(a, rd.p.map(p => CW.center(...p))); a.lineWidth = (rd.major ? 11 : 8) + 6; a.stroke(); });
+    const d = new Uint8Array(a.getImageData(0, 0, w, h).data.buffer.slice(0)); A.width = A.height = 0; A = null;
+    if (U.uWheatM.value) U.uWheatM.value.dispose();
+    const t = new THREE.DataTexture(d, w, h, THREE.RGBAFormat); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; U.uWheatM.value = t;
+    if (!U.uWheatA.value) { const tx = new THREE.Texture(); tx.minFilter = tx.magFilter = THREE.LinearFilter; tx.generateMipmaps = false; tx.colorSpace = THREE.SRGBColorSpace; U.uWheatA.value = tx;
+      U.uWheatAvg.value.set(...CW.WHEATFLOW.avg); const img = new Image();
+      img.onload = () => { tx.image = img; tx.needsUpdate = true; U.uWheatOn.value = 1; if (!S.live && S.last) try { ren.render(scene, cam); } catch (e) {} }; img.src = CW.WHEATFLOW.src; }
+  }
   function hexWater() {   // fallback when the painted art isn't loaded: river through the river hexes, streams along their hex edges
     const riv = M.all.filter(([c, r]) => 'wbd'.includes(M.ter(c, r))).map(hx => CW.center(...hx)).sort((p, q) => p[1] - q[1]), streams = [];
     M.edgeAt && M.edgeAt.forEach((types, k) => { if (![...types].includes('stream')) return; const [c, r, d] = k.split(',').map(Number), [x, y] = CW.center(c, r); streams.push([CW.corner(x, y, d), CW.corner(x, y, d + 1)]); });
@@ -224,6 +251,7 @@ CW.R3 = (function () {
       ren.debug.onShaderError = (gl, prog, vs, fs) => { console.warn('Living landscape shader failed; effects off'); S.mats.forEach(m => { m.onBeforeCompile = () => {}; m.customProgramCacheKey = () => 'plain'; m.needsUpdate = true; }); setLive(false); S.broken = true; };
       U.uWater.value = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat); U.uWater.value.needsUpdate = true;
       U.uForest.value = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat); U.uForest.value.needsUpdate = true;
+      U.uWheatM.value = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat); U.uWheatM.value.needsUpdate = true;
       buildHeights(); scene = new THREE.Scene();
       // sky: blue overhead fading to a warm haze at the horizon; the haze also swallows distant ground (aerial perspective)
       const sk = document.createElement('canvas'); sk.width = 4; sk.height = 256; const kx = sk.getContext('2d'), g = kx.createLinearGradient(0, 0, 0, 256);
@@ -253,7 +281,7 @@ CW.R3 = (function () {
     return ok;
   }
   function fail(why) { if (failed) return; failed = true; ok = false; console.warn('3D battlefield off, using flat map:', why); if (glc) glc.style.display = 'none'; CW.toast && CW.toast('3D battlefield unavailable here, so the flat map is in use'); }
-  const tex = img => { if (img === terrainSrc) return; terrainSrc = img; ttex.image = img; ttex.needsUpdate = true; try { buildWater(); } catch (e) { console.warn('water mask skipped:', e.message); } try { buildForest(); } catch (e) { console.warn('forest mask skipped:', e.message); }   // grass under the board edge, from the painting's own colours
+  const tex = img => { if (img === terrainSrc) return; terrainSrc = img; ttex.image = img; ttex.needsUpdate = true; try { buildWater(); } catch (e) { console.warn('water mask skipped:', e.message); } try { buildForest(); } catch (e) { console.warn('forest mask skipped:', e.message); } try { buildWheat(); } catch (e) { console.warn('wheat skipped:', e.message); }   // grass under the board edge, from the painting's own colours
     try { const d = img.getContext('2d').getImageData(0, 0, 40, 40).data; let r = 0, g = 0, b = 0; for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; } const n = d.length / 4;
       S.skirt.material.color.setRGB(r / n / 255, g / n / 255, b / n / 255, THREE.SRGBColorSpace).multiplyScalar(.85); } catch (e) { /* tainted or lost: keep default */ } };
   // ---------- camera ----------

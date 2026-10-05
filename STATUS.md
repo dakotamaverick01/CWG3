@@ -328,5 +328,7 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Not done: the brooks are still painted + thread (could get the same ribbon); bridges/fords cut the ribbon by distance only.
 
 ## Session 19b (5 Oct) — wheat in Blender (preview, awaiting John's approval)
-- tools/wheat/wheat.py: headless Blender renders a seamless looping wheat field (5,200 stalks per tile, wind gust rolling west to east, low western sun). 48 frames, 256 px, ~7 s/frame. Preview sent; not in the game yet.
+- tools/wheat/wheat.py: headless Blender renders a seamless looping wheat field (5,200 stalks per tile, wind gust rolling west to east, low western sun). 48 frames, 256 px, ~7 s/frame. Approved by John and wired in (below).
 - Queued for the next water pass: creek flow is a little fast (John), so lower uFps / slide speed.
+- In game: assets/art/wheat_flow.js (8x6 flipbook, 128 px cells, ~0.6 MB) + render3d.js ground shader. Wheat hexes (crop hexes the painter made wheat, not corn; roads cut out) multiply the painted wheat by the flipbook (colour / its average) at 12 fps. Two samples (64 px and 97 px tiles, different frame offsets) so the gust bands don't repeat every tile; the gust phase also drifts across a field. Living off = still frame. Fades back to the painting when zoomed far out (no shimmer).
+- Shot: docs/shots/19b_wheat_living.jpg. Next: corn with the same pipeline (tools/wheat/wheat.py with corn geometry).
