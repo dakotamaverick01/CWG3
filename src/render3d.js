@@ -34,7 +34,7 @@ CW.R3 = (function () {
   // painted wheat (colour / its average), the gust phase drifts across a field so tiles don't repeat in step, fades out when zoomed far out
   if (uWheatOn > 0.5) { vec2 wmp = vCwW.xz + uMap * 0.5; float wq = texture2D(uWheatM, wmp / uMap).a;
     if (wq > 0.01) { float wk = wq * (1.0 - smoothstep(0.9, 2.2, length(fwidth(wmp))));
-      if (wk > 0.0) { float ft = (uLive > 0.5 ? uT * 12.0 : 0.0) + cwN(wmp / 260.0) * 24.0, f0 = mod(floor(ft), 48.0), f1 = mod(f0 + 1.0, 48.0);
+      if (wk > 0.0) { float ft = (uLive > 0.5 ? uT * 5.0 : 0.0) + cwN(wmp / 260.0) * 24.0, f0 = mod(floor(ft), 48.0), f1 = mod(f0 + 1.0, 48.0);
         // two samples at unrelated scales/phases, so the gust bands interfere instead of repeating every tile
         vec2 q = fract(wmp / 64.0) * 0.98 + 0.01, q2 = fract(wmp / 97.0 + vec2(0.31, 0.57)) * 0.98 + 0.01; float g0 = mod(f0 + 17.0, 48.0), g1 = mod(f1 + 17.0, 48.0);
         vec3 wa = texture2D(uWheatA, vec2((mod(f0, 8.0) + q.x) / 8.0, 1.0 - (floor(f0 / 8.0) + 1.0 - q.y) / 6.0)).rgb;
@@ -136,7 +136,7 @@ CW.R3 = (function () {
       const tex = new THREE.Texture(); tex.minFilter = tex.magFilter = THREE.LinearFilter; tex.generateMipmaps = false; tex.colorSpace = THREE.NoColorSpace;
       const img = new Image(); img.onload = () => { tex.image = img; tex.needsUpdate = true; if (S.ribbon) S.ribbon.visible = true; if (!S.live && S.last) try { ren.render(scene, cam); } catch (e) {} }; img.src = CW.WATERFLOW.src;
       S.rmat = new THREE.ShaderMaterial({ vertexShader: RIB_VS, fragmentShader: RIB_FS, side: THREE.DoubleSide, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-        uniforms: { uAtlas: { value: tex }, uT: U.uT, uLive: U.uLive, uFps: { value: 16 }, uMap: U.uMap, uWake: WK.uWake, uWBox: WK.uWBox, uWTx: WK.uWTx,
+        uniforms: { uAtlas: { value: tex }, uT: U.uT, uLive: U.uLive, uFps: { value: 6 }, uMap: U.uMap, uWake: WK.uWake, uWBox: WK.uWBox, uWTx: WK.uWTx,
           uSun: { value: new THREE.Vector3(-1000, 300, 300).normalize() }, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } } });
       S.rtex = tex; }
     const m = new THREE.Mesh(geo, S.rmat); m.renderOrder = 1; m.frustumCulled = false; m.visible = !!S.rtex.image; S.ribbon = m; scene.add(m);
@@ -144,7 +144,7 @@ CW.R3 = (function () {
   // brooks: still painted water plus one pale thread drifting downstream along each recorded stream path (living on only)
   const THREAD_VS = 'attribute float aS, aV; varying float vS, vV; void main() { vS = aS; vV = aV; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
   const THREAD_FS = `uniform float uT; varying float vS, vV; float h1(float n) { return fract(sin(n * 91.7) * 43758.5453); }
-    void main() { float p = vS / 46.0 - uT * 0.55, k = floor(p), f = fract(p), len = 0.35 + 0.3 * h1(k);
+    void main() { float p = vS / 46.0 - uT * 0.30, k = floor(p), f = fract(p), len = 0.35 + 0.3 * h1(k);
       float a = smoothstep(0.0, 0.08, f) * (1.0 - smoothstep(len - 0.12, len, f)) * (0.35 + 0.45 * h1(k + 7.0)) * (1.0 - vV * vV);
       gl_FragColor = vec4(0.86, 0.90, 0.89, a * 0.7); }`;
   function buildThreads(streams) {
@@ -296,7 +296,8 @@ CW.R3 = (function () {
     S.last = { w, h }; }
   function render(gc, w, h, dpr, terrainImg) {
     if (!ok) return false;
-    try { tex(terrainImg); if (ren.getPixelRatio() !== dpr || ren.domElement.width !== Math.round(w * dpr) || ren.domElement.height !== Math.round(h * dpr)) { ren.setPixelRatio(dpr); ren.setSize(w, h, false); }
+    try { tex(terrainImg); dpr = Math.min(dpr, 1.5);   // session 19d: Retina draws the 3D board at 1.5x, not 2x (about 44% fewer pixels); units stay sharp on their own canvas
+      if (ren.getPixelRatio() !== dpr || ren.domElement.width !== Math.round(w * dpr) || ren.domElement.height !== Math.round(h * dpr)) { ren.setPixelRatio(dpr); ren.setSize(w, h, false); }
       place(gc, w, h); dtex.needsUpdate = true; U.uT.value = performance.now() / 1000; warmFog(); ren.render(scene, cam); return true; }
     catch (e) { fail(e.message); return false; }
   }

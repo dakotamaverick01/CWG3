@@ -340,3 +340,10 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 3. Feels sluggish in the browser. Likely: Retina renders 4× pixels (cap WebGL pixel ratio ~1.5), living loop capped at 30 fps (allow 60 when fast), whole 2D unit canvas redrawn each frame. Profile on the Mac first.
 4. Living landscape default ON (see above).
 5. Wire title art: assets/incoming/title/30_title (load), 31_menu (menu), 32_outcomes (after-action; crop captions + fake signatures), 30b_title_alt spare.
+
+## Session 19d (5 Oct, late) — John's fix list ✅ (items 1–4; title art wiring still next)
+- Unit glide ~220 ms/hex (350–1400 ms) instead of 60 ms/hex, and it now also plays when an enemy sighting halts the move. Computer-turn moves still jump (next: glide AI moves one at a time).
+- Calmer motion: creek flipbook 16 → 6 fps, wheat 12 → 5 fps, brook thread ~half speed, wake drift 0.20 → 0.12.
+- Smoother: 3D board capped at 1.5× pixel ratio on Retina (~44% fewer pixels to draw). If it still feels slow, profile on the Mac next (30 fps living cap, full unit-canvas redraws).
+- Living landscape: forced ON once for everyone (cwg3.liv19 flag); the slow-frame guard now turns it off for the session only and no longer saves it.
+- Headless check: move + wake test, wheat/creek probe — no errors.

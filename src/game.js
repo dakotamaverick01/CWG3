@@ -8,7 +8,9 @@ CW.M = M;
 const cv = document.getElementById('map'), sx = cv.getContext('2d'), mapCache = {}, glc = document.getElementById('gl');
 let cx = sx;   // cx = where the current layer draws: the screen, or (3D battlefield) the markings decal laid over the hills
 if (CW.R3 && glc) CW.R3.init(M, glc);
-if (CW.R3 && CW.R3.onSlow) CW.R3.onSlow(ms => { G.opts.living = false; CW.saveOpts(G.opts); CW.R3.setLive(false); draw(); toast(`Living landscape switched off: frames were taking ${Math.round(ms)} ms. Turn it back on in Options`); });
+// session 19d: living landscape defaults ON; the slow-frame guard switches it off for this session only (not saved)
+try { if (!localStorage.getItem('cwg3.liv19')) { G.opts.living = true; CW.saveOpts(G.opts); localStorage.setItem('cwg3.liv19', '1'); } } catch (e) {}
+if (CW.R3 && CW.R3.onSlow) CW.R3.onSlow(ms => { G.opts.living = false; CW.R3.setLive(false); draw(); toast(`Living landscape switched off: frames were taking ${Math.round(ms)} ms. Turn it back on in Options`); });
 // session 18: wading infantry/cavalry feed the creek wake (guns and leaders don't); only units the player can see
 if (CW.R3 && CW.R3.wakeSource) CW.R3.wakeSource(() => { if (!G.started) return null; const a = G.anim, out = [], wet = h => 'wd'.includes(M.ter(h[0], h[1]));
   for (const u of G.units) { if (u.gone || (u.type !== 'inf' && u.type !== 'cav') || !shown(u)) continue; let c = u.c, r = u.r, hs = [[u.c, u.r]];
@@ -272,9 +274,9 @@ function walk(u, path) { const before = new Set(G.vis); let spent = 0, halted = 
     const spotted = [...G.vis].filter(id => !before.has(id));
     if (spotted.length) { halted = true; last = i; toast(`Enemy spotted: ${byId(spotted[0]).name}!${i < path.length - 1 ? ' Halting.' : ''}`); break; } }
   u.mp = Math.max(0, Math.round((u.mp - spent) * 10) / 10); u.acted = 1;
-  if (!halted && !G.aiBusy && G.opts.animMove !== false && path.length > 1) {
-    const dur = Math.max(120, Math.min(400, (path.length - 1) * 60));
-    G.anim = { u, path, t0: performance.now(), dur };
+  if (!G.aiBusy && G.opts.animMove !== false && last >= 1) {   // session 19d: slower glide (~220 ms/hex), and it also plays when an enemy sighting halts the move
+    const gp = path.slice(0, last + 1), dur = Math.max(350, Math.min(1400, (gp.length - 1) * 220));
+    G.anim = { u, path: gp, t0: performance.now(), dur };
     requestAnimationFrame(animMoveFrame);
   } else if (CW.R3 && CW.R3.wade && (u.type === 'inf' || u.type === 'cav') && shown(u)) {   // no glide (computer turn): the wake goes down along the wet steps at once
     for (let i = 1; i <= last; i++) if ([path[i - 1], path[i]].some(h => 'wd'.includes(M.ter(h[0], h[1])))) CW.R3.wade(...CW.center(...path[i - 1]), ...CW.center(...path[i]), u.type === 'cav' ? .9 : .7);
