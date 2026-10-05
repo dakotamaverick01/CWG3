@@ -8,7 +8,7 @@ Save everything to ~/Downloads. Next Claude session pulls them into assets/incom
 - One prompt = one generation. Paste the whole block exactly; nothing to fill in.
 - If a result has any lettering, garbled text, a modern detail, or wrong flags, regenerate (same prompt is fine).
 - Keep the best 1–2 of each; don't upscale or edit.
-- Flag check (only matters where flags appear): United States = stars and stripes with a blue canton of white stars (NOT a modern 50-star look is fine if small, but no other designs); Confederate = red battle flag with a blue X (saltire) edged white, white stars on the X.
+- Flag check (only where flags appear): United States = stars and stripes, blue canton with white stars. Confederate = red battle flag with a blue X (saltire) edged in white, white stars on the X. Anything else, regenerate.
 
 ---
 
