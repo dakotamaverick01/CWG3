@@ -8,7 +8,7 @@ CW.R3 = (function () {
   const EX = 30, FOV = 30, TILT_MIN = 40, TILT_MAX = 80, TILT_DEF = 58;   // EX = height of one level in map px (hex radius 44)
   let ok = false, failed = false, ren, scene, cam, dcv, dctx, dtex, ttex, terrainSrc = null, M, MW, MH, HW, HH, HF, glc;
   const S = { tilt: TILT_DEF, anim: null, last: null, live: false, raf: 0, prev: 0, acc: 0, n: 0, win0: 0, mats: [], wk: new Map(), src: null, threads: null };
-  // ---------- living landscape (sessions 17a-b, 18): cloud shadows, creek wake, brook thread, tree sway, warm haze; one time uniform, patched into the ground material ----------
+  // ---------- living landscape (sessions 17a-b, 18, 19): cloud shadows, 3D creek + wake, brook thread, tree sway, warm haze; one time uniform, patched into the ground material ----------
   const U = { uT: { value: 0 }, uLive: { value: 0 }, uWater: { value: null }, uForest: { value: null }, uMap: { value: window.THREE ? new THREE.Vector2(1, 1) : null } };
   const GLSL_NOISE = `
     float cwH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -37,18 +37,7 @@ CW.R3 = (function () {
     vec2 cp = vCwW.xz / 900.0 + vec2(uT * 0.010, uT * 0.004);
     float sh = smoothstep(0.50, 0.72, cwF(cp)), lit = 1.0 - sh;
     diffuseColor.rgb *= (1.0 - 0.18 * sh) * mix(vec3(1.0), vec3(1.035, 1.012, 0.975), lit);
-    ${water ? `// session 18: the creek is shaded from the wake heightfield (CW.WAKE): troughs darker, a thin pale sheen on crests, foam only at the bank
-    if (uWBox.z > 0.0) { vec2 mp = vCwW.xz + uMap * 0.5, wuv = (mp - uWBox.xy) / uWBox.zw;
-      float wm = (wuv.x > 0.0 && wuv.x < 1.0 && wuv.y > 0.0 && wuv.y < 1.0) ? texture2D(uWater, mp / uMap).a : 0.0;
-      if (wm > 0.02) {
-        float h = texture2D(uWake, wuv).r, core = smoothstep(0.45, 0.85, wm), band = smoothstep(0.04, 0.3, wm) * (1.0 - core);
-        vec2 g = vec2(texture2D(uWake, wuv + vec2(uWTx.x, 0.0)).r - texture2D(uWake, wuv - vec2(uWTx.x, 0.0)).r,
-                      texture2D(uWake, wuv + vec2(0.0, uWTx.y)).r - texture2D(uWake, wuv - vec2(0.0, uWTx.y)).r);
-        float sl = -dot(g, vec2(-0.6, 0.8));                           // slope facing the camera (south) and the sun (west)
-        diffuseColor.rgb *= (1.0 - 0.32 * wm * smoothstep(0.0, 0.18, -h)) * (1.0 + 0.05 * wm * smoothstep(0.0, 0.18, h));
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.76, 0.78, 0.76), band * 0.35 * smoothstep(0.08, 0.40, abs(h) + length(g)));
-        cwSheen = core * smoothstep(0.04, 0.14, sl) * smoothstep(0.02, 0.12, h);
-      } }` : ''}
+
   }`)
         .replace('#include <opaque_fragment>', 'outgoingLight += cwSheen * vec3(0.80, 0.85, 0.86) * 0.25;\n  outgoingLight *= mix(vec3(1.0), vec3(1.025, 1.005, 0.97), cwWarm);\n#include <opaque_fragment>');
     };
@@ -65,6 +54,79 @@ CW.R3 = (function () {
     const t = new THREE.DataTexture(d, w, h, THREE.RGBAFormat); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; U.uWater.value = t; U.uMap.value.set(MW, MH);
     if (CW.WAKE) { try { CW.WAKE.build(ren, W, hAt, MW, MH); } catch (e) { console.warn('wake field skipped:', e.message); } }
     buildThreads(W.streams || []);
+    try { buildRibbon(W); } catch (e) { console.warn('3D creek skipped:', e.message); }
+  }
+
+  // ---------- session 19: the creek as a real 3D water surface ----------
+  // A ribbon mesh laid along the creek, lit live: the moving surface comes from a Blender-rendered normal flipbook (CW.WATERFLOW,
+  // seamless along the flow and in time), plus the wake heightfield (CW.WAKE). Sky reflection with fresnel, sun highlight,
+  // deep slate-teal mid-channel, see-through shallows at the banks and fords, hidden under bridges.
+  const RIB_VS = `attribute vec2 aFlow; attribute float aX, aD; varying vec2 vUv, vFlow, vMap; varying float vX, vD; varying vec3 vW; uniform vec2 uMap;
+    void main() { vUv = uv; vFlow = aFlow; vX = aX; vD = aD; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vMap = w.xz + uMap * 0.5; gl_Position = projectionMatrix * viewMatrix * w; }`;
+  const RIB_FS = `uniform sampler2D uAtlas, uWake; uniform float uT, uLive, uFps; uniform vec2 uMap, uWTx; uniform vec4 uWBox; uniform vec3 uSun, uFog; uniform vec2 uFogR;
+    varying vec2 vUv, vFlow, vMap; varying float vX, vD; varying vec3 vW;
+    vec3 cell(float f, vec2 uv) { float c = mod(f, 8.0), r = floor(f / 8.0); vec2 q = vec2(clamp(uv.x, 0.02, 0.98), fract(uv.y) * 0.992 + 0.004);
+      return texture2D(uAtlas, vec2((c + q.x) / 8.0, 1.0 - (r + 1.0 - q.y) / 6.0)).rgb; }
+    void main() {
+      float ft = uLive > 0.5 ? uT * uFps : 0.0, f0 = mod(floor(ft), 48.0), f1 = mod(f0 + 1.0, 48.0);
+      vec3 tx = mix(cell(f0, vUv), cell(f1, vUv), fract(ft));
+      vec3 tx2 = mix(cell(mod(f0 + 24.0, 48.0), vUv * vec2(1.0, 2.3) + vec2(0.0, 0.37)), cell(mod(f1 + 24.0, 48.0), vUv * vec2(1.0, 2.3) + vec2(0.0, 0.37)), fract(ft));
+      vec2 nt = (tx.rg * 2.0 - 1.0) * 0.75 + (tx2.rg * 2.0 - 1.0) * 0.45;          // tangent-space slope (x across, y downstream): broad flow + finer ripples
+      vec3 al = normalize(vec3(vFlow.x, 0.0, vFlow.y)), ac = vec3(-al.z, 0.0, al.x);
+      vec3 N = normalize(vec3(0.0, 1.0, 0.0) + ac * nt.x + al * nt.y);
+      float wk = 0.0;
+      if (uWBox.z > 0.0) { vec2 wuv = (vMap - uWBox.xy) / uWBox.zw;
+        if (wuv.x > 0.0 && wuv.x < 1.0 && wuv.y > 0.0 && wuv.y < 1.0) { wk = texture2D(uWake, wuv).r;
+          vec2 g = vec2(texture2D(uWake, wuv + vec2(uWTx.x, 0.0)).r - texture2D(uWake, wuv - vec2(uWTx.x, 0.0)).r,
+                        texture2D(uWake, wuv + vec2(0.0, uWTx.y)).r - texture2D(uWake, wuv - vec2(0.0, uWTx.y)).r);
+          N = normalize(N - vec3(g.x, 0.0, g.y) * 1.6); } }
+      vec3 V = normalize(cameraPosition - vW);
+      float depth = vD * (1.0 - pow(abs(vX * 2.0 - 1.0), 2.2));                 // deepest mid-channel
+      vec3 body = mix(vec3(0.085, 0.075, 0.040), vec3(0.012, 0.030, 0.024), smoothstep(0.0, 0.75, depth));
+      body *= 1.0 - 0.35 * smoothstep(0.0, 0.5, -wk);
+      vec3 R = reflect(-V, N);
+      vec3 sky = mix(vec3(0.52, 0.47, 0.36), vec3(0.22, 0.29, 0.36), smoothstep(-0.05, 0.75, R.y));
+      float fr = 0.06 + 0.94 * pow(1.0 - max(dot(N, V), 0.0), 4.0);
+      vec3 col = mix(body, sky, clamp(fr * 1.15, 0.0, 0.6));
+      float sp = pow(max(dot(N, normalize(uSun + V)), 0.0), 140.0);
+      col += vec3(1.0, 0.96, 0.88) * sp * 1.2;
+      col += vec3(0.20, 0.22, 0.20) * smoothstep(0.62, 0.8, tx.b) * 0.35;        // crests catch a little light
+      float edge = smoothstep(0.0, 0.16, vX) * smoothstep(1.0, 0.84, vX);
+      float a = edge * mix(0.30, 0.94, smoothstep(0.0, 0.6, depth));
+      col = mix(col, vec3(0.42, 0.40, 0.34), (1.0 - smoothstep(0.03, 0.14, min(vX, 1.0 - vX))) * smoothstep(0.03, 0.25, abs(wk)) * 0.6);   // foam at the bank, from the wake
+      col = mix(col, uFog, smoothstep(uFogR.x, uFogR.y, length(cameraPosition - vW)));
+      gl_FragColor = vec4(col, a * vD > 0.0 ? a : 0.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`;
+  function buildRibbon(W) {
+    if (S.ribbon) { scene.remove(S.ribbon); S.ribbon.geometry.dispose(); S.ribbon = null; }
+    if (!W.river || W.river.length < 2 || !window.CW.WATERFLOW) return;
+    let pts = W.river; if (hAt(...pts[0]) < hAt(...pts[pts.length - 1]) - 1) pts = pts.slice().reverse();
+    const rw = (W.rw || CW.R * .46) * 1.04, period = rw * 2, c = [];
+    for (let i = 0; i < pts.length - 1; i++) { const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;   // CW.smoothPath's curve
+      const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6], c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6], n = Math.max(2, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 4));
+      for (let k = i ? 1 : 0; k <= n; k++) { const t = k / n, u = 1 - t; c.push([u * u * u * p1[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * p2[0], u * u * u * p1[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * p2[1]]); } }
+    const br = M.all.filter(([q, r]) => M.ter(q, r) === 'b').map(h => CW.center(...h)), fd = M.all.filter(([q, r]) => M.ter(q, r) === 'd').map(h => CW.center(...h));
+    const near = (L, x, y, d) => L.reduce((m, p) => Math.min(m, Math.hypot(p[0] - x, p[1] - y)), 1e9) < d;
+    const fall = (L, x, y, d0, d1) => { const d = L.reduce((m, p) => Math.min(m, Math.hypot(p[0] - x, p[1] - y)), 1e9); return Math.max(0, Math.min(1, (d - d0) / (d1 - d0))); };
+    const COLS = 7, pos = [], uv = [], fl = [], ax = [], ad = [], idx = []; let s = 0;
+    c.forEach(([x, y], i) => { const [px, py] = c[Math.max(0, i - 1)], [nx, ny] = c[Math.min(c.length - 1, i + 1)], L = Math.hypot(nx - px, ny - py) || 1, tx = (nx - px) / L, ty = (ny - py) / L;
+      if (i) s += Math.hypot(x - c[i - 1][0], y - c[i - 1][1]);
+      const dep = Math.min(fall(br, x, y, CW.R * .55, CW.R * .8), .12 + .88 * fall(fd, x, y, CW.R * .35, CW.R * .75));   // gone under bridges, shallow at fords
+      for (let k = 0; k < COLS; k++) { const f = k / (COLS - 1), o = (f - .5) * rw, qx = x - ty * o, qy = y + tx * o;
+        pos.push(qx - MW / 2, hAt(qx, qy) + .8, qy - MH / 2); uv.push(f, s / period); fl.push(tx, ty); ax.push(f); ad.push(dep); }
+      if (i) for (let k = 0; k < COLS - 1; k++) { const a = (i - 1) * COLS + k, b = i * COLS + k; idx.push(a, b, a + 1, a + 1, b, b + 1); } });
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setAttribute('aFlow', new THREE.Float32BufferAttribute(fl, 2)); geo.setAttribute('aX', new THREE.Float32BufferAttribute(ax, 1)); geo.setAttribute('aD', new THREE.Float32BufferAttribute(ad, 1)); geo.setIndex(idx);
+    if (!S.rmat) { const WK = CW.WAKE ? CW.WAKE.U : { uWake: { value: null }, uWBox: { value: new THREE.Vector4() }, uWTx: { value: new THREE.Vector2(1, 1) } };
+      const tex = new THREE.Texture(); tex.minFilter = tex.magFilter = THREE.LinearFilter; tex.generateMipmaps = false; tex.colorSpace = THREE.NoColorSpace;
+      const img = new Image(); img.onload = () => { tex.image = img; tex.needsUpdate = true; if (S.ribbon) S.ribbon.visible = true; if (!S.live && S.last) try { ren.render(scene, cam); } catch (e) {} }; img.src = CW.WATERFLOW.src;
+      S.rmat = new THREE.ShaderMaterial({ vertexShader: RIB_VS, fragmentShader: RIB_FS, side: THREE.DoubleSide, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+        uniforms: { uAtlas: { value: tex }, uT: U.uT, uLive: U.uLive, uFps: { value: 16 }, uMap: U.uMap, uWake: WK.uWake, uWBox: WK.uWBox, uWTx: WK.uWTx,
+          uSun: { value: new THREE.Vector3(-1000, 300, 300).normalize() }, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } } });
+      S.rtex = tex; }
+    const m = new THREE.Mesh(geo, S.rmat); m.renderOrder = 1; m.frustumCulled = false; m.visible = !!S.rtex.image; S.ribbon = m; scene.add(m);
   }
   // brooks: still painted water plus one pale thread drifting downstream along each recorded stream path (living on only)
   const THREAD_VS = 'attribute float aS, aV; varying float vS, vV; void main() { vS = aS; vV = aV; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
@@ -226,5 +288,5 @@ CW.R3 = (function () {
   const tilt = dv => { S.tilt = Math.max(TILT_MIN, Math.min(TILT_MAX, S.tilt + dv)); return S.tilt; };
   function sweep(gc, fitZ, redraw) { if (!ok) return; S.anim = { t0: performance.now(), dur: 3200, tilt: 32, z: Math.min(gc.z, fitZ * .75) };
     const loop = () => { redraw(); if (S.anim) requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
-  return { init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, bench, onSlow: f => { S.onSlow = f; }, wakeSource: f => { S.src = f; }, wade: (x0, y0, x1, y1, s) => { if (S.live && CW.WAKE && CW.WAKE.ok) CW.WAKE.trail(x0, y0, x1, y1, s * WAKE_S); }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get renderer() { return ren; }, get threads() { return S.threads; }, get camera() { return cam; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
+  return { init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, bench, onSlow: f => { S.onSlow = f; }, wakeSource: f => { S.src = f; }, wade: (x0, y0, x1, y1, s) => { if (S.live && CW.WAKE && CW.WAKE.ok) CW.WAKE.trail(x0, y0, x1, y1, s * WAKE_S); }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get renderer() { return ren; }, get threads() { return S.threads; }, get ribbon() { return S.ribbon; }, get camera() { return cam; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
 })();

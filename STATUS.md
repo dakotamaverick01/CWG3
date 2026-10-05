@@ -315,3 +315,14 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Shots: docs/shots/18_living_off.jpg, 18_living_on_wake.jpg (22nd Virginia stepping into Lyle's Ford; wake just downstream).
 - Tuning knobs: CW.WAKE.P (K wave speed, ADV drift, DV/DH damping, EDGE bank soak, R drop radius, AMB pulses); render3d WAKE_S (unit strength).
 - Watch on the Mac: wake is small at default zoom (creek is ~3.5 cells wide); if it reads too faint, raise WAKE_S or the trough term in render3d.
+
+## Session 19 (5 Oct) — creek as real 3D water (Blender-rendered flow) + creek 2x wider ✅
+- John: Session 18 still read as "painted blue"; wants lush flowing 3D water. Picked: Blender-rendered flow, widen creek ~2x.
+- Blender 4.2 (headless, cloud) renders a 48-frame seamless loop of a flowing height field (tools/water/flow.py: noise layers on a 4D torus along the flow, each sliding a whole number of tiles per loop → no seam in space or time). tools/water/atlas.py turns it into a normal-map flipbook (8×6 cells of 128×256, RG = normal, B = height) embedded in assets/art/water_flow.js (~0.8 MB, data URI so double-click still works).
+- render3d.js: new 3D water ribbon along CW.WATER.river (own mesh, lit live): flipbook at 16 fps plus a second finer sample, sky reflection with fresnel, sun highlight, deep green-teal mid-channel, see-through shallows at banks and fords, hidden under bridges, tone-mapped like the ground. Wake field (CW.WAKE) bends the surface and darkens troughs; foam at the bank from the wake. Living off = still frame (water stays 3D, just not moving). The Session 18 ground-shader creek shading was removed (ribbon replaces it).
+- render_art.js: river width R*.46 → R*.92 (paint + masks + wake grid now 30×256); ford gravel/stones scaled up to match.
+- water_wake.js: background pulses back down to 0.05 (the flipbook gives the motion now).
+- Fixed on the way: ribbon was culled (back-facing) → double-sided.
+- Shots: docs/shots/19_creek_still.jpg (living off), 19_creek_living_wade.jpg (regiment in Lyle's Ford), 19_creek_closeup.jpg.
+- Tuning knobs (render3d RIB_FS): uFps (flow speed), nt scales (ripple strength), body/sky colours, fresnel clamp 0.6. Re-render water: tools/water/flow.py then atlas.py.
+- Not done: the brooks are still painted + thread (could get the same ribbon); bridges/fords cut the ribbon by distance only.

@@ -141,7 +141,7 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet) {
   // river: muddy banks, deep water, faint pale sky reflections (session 18: pale dashes, not gold)
   const riv = M.all.filter(([c, r]) => 'wbd'.includes(M.ter(c, r))).map(h => CW.center(...h)).sort((a, b) => a[1] - b[1]);
   if (riv.length) { riv.unshift([riv[0][0], riv[0][1] - R * 1.4]); riv.push([riv[riv.length - 1][0], riv[riv.length - 1][1] + R * 1.4]);
-    const rw = R * .46; CW.WATER.river = riv.map(p => p.slice()); CW.WATER.rw = rw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const rw = R * .92; CW.WATER.river = riv.map(p => p.slice()); CW.WATER.rw = rw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const RW = !!CW.ARTI.ground.water_1;                                                   // batch 2: painted river water + mud banks
     CW.smoothPath(ctx, riv); ctx.strokeStyle = pat(RW ? 'water_2' : 'mud_0', 0, 0, 0, .3); ctx.lineWidth = rw + 16; ctx.stroke();
     ctx.strokeStyle = 'rgba(40,30,15,.35)'; ctx.lineWidth = rw + 5; ctx.stroke();
@@ -222,8 +222,8 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet) {
       put(y + R * .55, () => P(ctx, 'clut_haystack', x + R * .45, y + R * .55, R * .4)); put(y + R * .6, () => P(ctx, 'clut_woodpile', x - R * .55, y + R * .6, R * .3)); }
     if (t === 'k') for (let i = 0; i < 3; i++) { const px = x + (rand() - .5) * R * 1.1, py = y + (rand() - .5) * R * .9; put(py, () => P(ctx, 'clut_boulder', px, py, R * (.22 + rand() * .15), rand() < .5)); }
     if (t === 'b') put(y + R * .3, () => P(ctx, 'ruin_arch_bridge_b', x, y + R * .3, R * 1.5));
-    if (t === 'd' && CW.ARTI.frames.wx_ford_stones) { ctx.save(); CW.hexPath(ctx, x, y, R * .5); ctx.clip(); ctx.fillStyle = pat('water_3', 0, 0, 0, .3); ctx.globalAlpha = .8; ctx.fillRect(x - R, y - R, R * 2, R * 2); ctx.restore();   // batch 2 ford
-      put(y + R * .15, () => P(ctx, 'wx_ford_stones', x, y + R * .15, R * .8, rand() < .5)); }
+    if (t === 'd' && CW.ARTI.frames.wx_ford_stones) { ctx.save(); CW.hexPath(ctx, x, y, R * .7); ctx.clip(); ctx.fillStyle = pat('water_3', 0, 0, 0, .3); ctx.globalAlpha = .8; ctx.fillRect(x - R, y - R, R * 2, R * 2); ctx.restore();   // batch 2 ford
+      put(y + R * .15, () => P(ctx, 'wx_ford_stones', x, y + R * .15, R * 1.25, rand() < .5)); }
     else if (t === 'd') { ctx.fillStyle = 'rgba(225,210,170,.85)'; for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.ellipse(x + i * 6, y + (i % 2) * 2, 2.6, 1.8, 0, 0, 7); ctx.fill(); } }
     if (t === 'x') { ctx.save(); ctx.translate(x, y); ctx.beginPath(); for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5, rr = i % 2 ? R * .42 : R * .7; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath();
       ctx.strokeStyle = 'rgba(40,28,14,.55)'; ctx.lineWidth = 9; ctx.stroke(); ctx.strokeStyle = pat('mud_2', 0, 0, 0, .3); ctx.lineWidth = 6; ctx.stroke(); ctx.strokeStyle = 'rgba(255,220,160,.3)'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
