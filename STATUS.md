@@ -358,3 +358,12 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - src/fx.js: smoke/flash/burst use the sprites when loaded (old code-drawn version stays as fallback). Volley = bank of 6 puffs that bloom, drift downwind and thin out (2.4 s); flash = additive glow; shell burst = 3 dust clouds + a quick flash; guns also leave a puff bank (2.6 s).
 - Known: effects draw on the ground layer, so figures sit on top of the smoke. Next: draw smoke above the units for depth.
 - Headless check: sprites render, no errors.
+
+## World pass — mesh ground (7 Oct, branch world-mesh, not merged)
+- 3D view: the valley floor is the existing height mesh (same heights → units, CW.R3.pick and the creek ribbon unchanged; pick test 6/6) wearing tiled ground textures, no longer the painted map.
+- Textures (from art.js, one 9-layer array texture): grass = sgb_0 + sgc_0 swapped by large noise; wheat = crpb_1; corn = crpa_0; dirt (farm, town, earthworks) = farmyard_1; knoll = rocky_1; swamp = mud_3; creek hexes = half slpa_3 creek-bank mud, half grass.
+- Missing textures, closest used: **woods floor** has no texture → rocky_3 darkened green (as the painter did); **orchard** → grass; **road** isn't a hex terrain, so roads stay as the painted road_0/1/3 strokes in the props layer. Wet weather still uses the dry ground textures in 3D.
+- Blending: 8 terrain weight channels at 1/4 scale (soft hex fills), border-wobbled and noise-raced in the shader so edges are ragged; each layer is sampled twice (different rotation/scale/offset) to hide the 512 px repeat; gentle large-scale colour drift; the painter's golden grade applied in the shader.
+- Props kept: render_art.js's own CW.paintArtFeatures (walls, fences, buildings, sheaves, haystacks, boulders, wagons, trees, roads, creek paint, labels) is drawn onto a transparent layer with the same seed, so everything sits exactly where the minimap shows it. render_art.js unchanged; the painted map is still the minimap + flat fallback (3 key works). game.js decal (UI marks) unchanged.
+- Lighting/exposure unchanged (looked right without retuning). Tilt default 58°.
+- Shots: docs/shots/wm_tilt58.jpg, wm_tilt40.jpg (range shading and living loop off for the shot).
