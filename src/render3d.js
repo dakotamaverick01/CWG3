@@ -5,7 +5,7 @@
 // G.cam keeps its old meaning (screen = map * z + x/y at the screen centre); this file turns it into a tilted camera.
 // Flat map option (G.opts.flat) or any WebGL failure → game.js falls back to the classic top-down drawing.
 CW.R3 = (function () {
-  const EX = 30, FOV = 30, TILT_MIN = 40, TILT_MAX = 80, TILT_DEF = 58;   // EX = height of one level in map px (hex radius 44)
+  const EX = 30, FOV = 30, TILT_MIN = 40, TILT_MAX = 80, TILT_DEF = 40;   // EX = height of one level in map px (hex radius 44)
   let ok = false, failed = false, ren, scene, cam, dcv, dctx, dtex, ttex, terrainSrc = null, M, MW, MH, HW, HH, HF, glc;
   const S = { tilt: TILT_DEF, anim: null, last: null, live: false, raf: 0, prev: 0, acc: 0, n: 0, win0: 0, mats: [], wk: new Map(), src: null, threads: null };
   // ---------- living landscape (sessions 17a-b, 18, 19): cloud shadows, 3D creek + wake, wind in the wheat, brook thread, tree sway, warm haze; one time uniform, patched into the ground material ----------
@@ -41,6 +41,13 @@ CW.R3 = (function () {
       vec3 col = vec3(0.0); float t = 0.0;
       for (int i = 0; i < 8; i++) { float f = max(w[i] - m + 0.12, 0.0); if (f > 0.0) { col += f * cwLayer(i, p); t += f; } }   // ragged, noisy borders
       col /= max(t, 1e-4);
+      // world pass 2: creek bank — a ragged, noisy grass-to-mud band near the water (creek mask uWater, 16 taps at two radii)
+      float wb = 0.0; for (int k = 0; k < 8; k++) { float an = float(k) * 0.785 + 0.4; vec2 o = vec2(cos(an), sin(an));
+        wb += texture2D(uWater, (p + o * 16.0) / uMap).a + texture2D(uWater, (p + o * 34.0) / uMap).a; }
+      wb /= 16.0;
+      if (wb > 0.0) { float bn = cwN(p / 14.0) * 0.6 + cwN(p / 41.0 + 5.3) * 0.4;
+        col *= 1.0 - 0.18 * smoothstep(0.0, 0.18, wb + (bn - 0.5) * 0.2);                                   // damp, darker grass nearing the water
+        col = mix(col, cwTile(8.0, p) * vec3(0.92, 0.90, 0.86), 0.9 * smoothstep(0.05, 0.30, wb + (bn - 0.5) * 0.30)); }   // ragged mud at the edge
       col *= mix(vec3(0.90, 0.94, 0.86), vec3(1.07, 1.03, 0.95), cwF(p / 1600.0));                      // gentle large-scale colour drift
       return col * vec3(1.08, 1.0, 0.84); }`;                                                            // the painter's golden grade
   // clouds on every ground surface; the creek wake only inside the creek mask
@@ -254,11 +261,62 @@ CW.R3 = (function () {
   function buildFeatures() {
     if (!CW.paintArtFeatures || !CW.ARTI) return null; const c = document.createElement('canvas'); c.width = MW; c.height = MH; const x = c.getContext('2d'), wet = M.weather === 'mud' || M.weather === 'rain';
     const pat = (name, rot = 0, ox = 0, oy = 0, s = .42) => { const p = x.createPattern(CW.ARTI.ground[name], 'repeat'); p.setTransform(new DOMMatrix().translate(ox, oy).rotate(rot).scale(s)); return p; };
-    CW.paintArtFeatures(x, M, CW.rng(11), pat, wet); return c; }
+    const objs = { trees: [] }; CW.paintArtFeatures(x, M, CW.rng(11), pat, wet, objs); S.trees = objs.trees; return c; }
   function buildGround(img) {
     let feat = null; try { if (buildGroundTex()) { buildGroundWeights(); feat = buildFeatures(); } } catch (e) { console.warn('tiled ground skipped, painted map in use:', e.message); feat = null; }
-    U.uGround.value = feat ? 1 : 0; if (S.feat && S.feat !== feat) { S.feat.width = S.feat.height = 0; } S.feat = feat;
+    U.uGround.value = feat ? 1 : 0; try { buildObjects(feat ? S.trees || [] : []); } catch (e) { console.warn('3D trees skipped:', e.message); } if (S.feat && S.feat !== feat) { S.feat.width = S.feat.height = 0; } S.feat = feat;
     ttex.image = feat || img; ttex.needsUpdate = true; }
+  // ---------- world pass 2: trees and the mill as objects standing on the mesh ----------
+  // Upright camera-facing billboards from the props atlas, all trees in ONE instanced draw (plus one for their soft ground shadows).
+  // Static this pass (no sway). Where a unit stands, half the trees in that hex go and the rest are shorter, so the unit reads as in the woods.
+  const OBJ_VS = `attribute vec3 aBase; attribute vec4 aUv, aSz; attribute float aHex, aRnd;
+    uniform sampler2D uOcc; uniform vec2 uOccN; uniform float uShadow; varying vec2 vUv, vQ; varying float vK, vDist;
+    void main() {
+      float k = 1.0;
+      if (aHex >= 0.0) { float occ = texture2D(uOcc, (vec2(mod(aHex, uOccN.x), floor(aHex / uOccN.x)) + 0.5) / uOccN).r; if (occ > 0.5) k = aRnd < 0.5 ? 0.0 : 0.62; }
+      vec2 c = position.xy + 0.5; vQ = c; vK = k; float w = aSz.x * k, h = aSz.y * k, vi = 1.0 - c.y;
+      vUv = vec2(aUv.x + c.x * aUv.z, 1.0 - (aUv.y + vi * aUv.w));
+      vec3 R = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]), Uc = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+      vec3 U = normalize(mix(vec3(0.0, 1.0, 0.0), Uc, 0.3)), wp;
+      if (uShadow > 0.5) wp = aBase + vec3((c.x - 0.5) * abs(w) * 1.25 + abs(w) * 0.32, 0.9, (c.y - 0.5) * abs(w) * 0.5 + abs(w) * 0.06);   // long-ish shadow to the east (sun in the west)
+      else wp = aBase + R * (c.x - aSz.z) * w + U * (aSz.w - vi) * h;
+      vec4 mv = viewMatrix * vec4(wp, 1.0); vDist = -mv.z; gl_Position = projectionMatrix * mv; }`;
+  const OBJ_FS = `uniform sampler2D uAtlas; uniform float uShadow; uniform vec3 uLight, uFog; uniform vec2 uFogR; varying vec2 vUv, vQ; varying float vK, vDist;
+    void main() {
+      if (vK <= 0.0) discard;
+      if (uShadow > 0.5) { float d = length((vQ - 0.5) * 2.0); gl_FragColor = vec4(0.10, 0.08, 0.14, (1.0 - smoothstep(0.35, 1.0, d)) * 0.32); return; }
+      vec4 t = texture2D(uAtlas, vUv); if (t.a < 0.45) discard;
+      vec3 col = mix(t.rgb * uLight, uFog, smoothstep(uFogR.x, uFogR.y, vDist));
+      gl_FragColor = vec4(col, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`;
+  const MILL = { hex: [6, 10], frame: 'bldg_mill', dx: .18, dy: .3, w: 1.2 };   // water mill on the west bank by Stone Bridge (John, 7 Oct); visual only
+  function buildObjects(trees) {
+    if (S.objs) { S.objs.forEach(m => { scene.remove(m); }); S.objs[0].geometry.dispose(); S.objs[1].geometry.dispose(); S.objs = null; }
+    const A = CW.ARTI, F = A && A.frames; if (!F || !A.props || !A.props.naturalWidth) return;
+    const AW = A.props.naturalWidth, AH = A.props.naturalHeight, list = trees.slice();
+    if (M.in(...MILL.hex) && F[MILL.frame]) { const [x, y] = CW.center(...MILL.hex); list.push([MILL.frame, x + MILL.dx * CW.R, y + MILL.dy * CW.R, MILL.w * CW.R, false, true]); }
+    const n = list.length, base = new Float32Array(n * 3), uv = new Float32Array(n * 4), sz = new Float32Array(n * 4), hx = new Float32Array(n), rn = new Float32Array(n), rnd = CW.rng(23);
+    list.forEach(([nm, x, y, w, flip, fixed], i) => { const f = F[nm]; if (!f) { sz[i * 4] = 0; return; } const [sx, sy, sw, sh, ax, ay] = f, b = W3(x, y);
+      base.set([b.x, b.y - 1.5, b.z], i * 3); uv.set([sx / AW, sy / AH, sw / AW, sh / AH], i * 4);
+      sz.set([flip ? -w : w, w * sh / sw, ax, ay], i * 4);   // negative width mirrors the sprite about its anchor
+      const h = fixed ? null : CW.pixelToHex(M, x, y); hx[i] = h ? h[1] * M.cols + h[0] : -1; rn[i] = rnd(); });
+    const mk = shadow => { const g = new THREE.InstancedBufferGeometry(), q = new THREE.PlaneGeometry(1, 1); g.index = q.index; g.setAttribute('position', q.attributes.position);
+      g.setAttribute('aBase', new THREE.InstancedBufferAttribute(base, 3)); g.setAttribute('aUv', new THREE.InstancedBufferAttribute(uv, 4)); g.setAttribute('aSz', new THREE.InstancedBufferAttribute(sz, 4));
+      g.setAttribute('aHex', new THREE.InstancedBufferAttribute(hx, 1)); g.setAttribute('aRnd', new THREE.InstancedBufferAttribute(rn, 1)); g.instanceCount = n;
+      const m = new THREE.Mesh(g, shadow ? S.omat[1] : S.omat[0]); m.frustumCulled = false; m.renderOrder = shadow ? 1 : 0; scene.add(m); return m; };
+    if (!S.omat) { const t = new THREE.Texture(A.props); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.needsUpdate = true;
+      S.occ = new THREE.DataTexture(new Uint8Array(M.cols * M.rows * 4), M.cols, M.rows, THREE.RGBAFormat); S.occ.needsUpdate = true;
+      const un = { uAtlas: { value: t }, uOcc: { value: S.occ }, uOccN: { value: new THREE.Vector2(M.cols, M.rows) }, uLight: { value: new THREE.Vector3(.58, .54, .49) }, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
+      S.omat = [0, 1].map(sh => new THREE.ShaderMaterial({ vertexShader: OBJ_VS, fragmentShader: OBJ_FS, uniforms: { ...un, uShadow: { value: sh } }, side: THREE.DoubleSide,
+        transparent: !!sh, depthWrite: !sh, polygonOffset: !!sh, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })); }
+    S.objs = [mk(false), mk(true)]; S.occKey = null; }
+  // which hexes hold a unit right now: your own units, plus the enemy infantry/cavalry the game already shows you (wake list) — never hidden enemies
+  function updateOcc() { if (!S.occ || !CW.G) return; const G = CW.G, on = new Set();
+    (G.units || []).forEach(u => { if (!u.gone && u.side === G.side) on.add(u.r * M.cols + u.c); });
+    const src = S.src && S.src(); if (src) src.forEach(o => { const h = CW.pixelToHex(M, o.x, o.y); if (h) on.add(h[1] * M.cols + h[0]); });
+    const key = [...on].sort((a, b) => a - b).join(','); if (key === S.occKey) return; S.occKey = key; const d = S.occ.image.data; d.fill(0); on.forEach(i => { d[i * 4] = 255; }); S.occ.needsUpdate = true; }
   function hexWater() {   // fallback when the painted art isn't loaded: river through the river hexes, streams along their hex edges
     const riv = M.all.filter(([c, r]) => 'wbd'.includes(M.ter(c, r))).map(hx => CW.center(...hx)).sort((p, q) => p[1] - q[1]), streams = [];
     M.edgeAt && M.edgeAt.forEach((types, k) => { if (![...types].includes('stream')) return; const [c, r, d] = k.split(',').map(Number), [x, y] = CW.center(c, r); streams.push([CW.corner(x, y, d), CW.corner(x, y, d + 1)]); });
@@ -362,7 +420,7 @@ CW.R3 = (function () {
     if (!ok) return false;
     try { tex(terrainImg); dpr = Math.min(dpr, 1.5);   // session 19d: Retina draws the 3D board at 1.5x, not 2x (about 44% fewer pixels); units stay sharp on their own canvas
       if (ren.getPixelRatio() !== dpr || ren.domElement.width !== Math.round(w * dpr) || ren.domElement.height !== Math.round(h * dpr)) { ren.setPixelRatio(dpr); ren.setSize(w, h, false); }
-      place(gc, w, h); dtex.needsUpdate = true; U.uT.value = performance.now() / 1000; warmFog(); ren.render(scene, cam); return true; }
+      place(gc, w, h); updateOcc(); dtex.needsUpdate = true; U.uT.value = performance.now() / 1000; warmFog(); ren.render(scene, cam); return true; }
     catch (e) { fail(e.message); return false; }
   }
   // screen position of a map point on the ground, and how many screen px one map px measures there

@@ -367,3 +367,15 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Props kept: render_art.js's own CW.paintArtFeatures (walls, fences, buildings, sheaves, haystacks, boulders, wagons, trees, roads, creek paint, labels) is drawn onto a transparent layer with the same seed, so everything sits exactly where the minimap shows it. render_art.js unchanged; the painted map is still the minimap + flat fallback (3 key works). game.js decal (UI marks) unchanged.
 - Lighting/exposure unchanged (looked right without retuning). Tilt default 58°.
 - Shots: docs/shots/wm_tilt58.jpg, wm_tilt40.jpg (range shading and living loop off for the shot).
+
+## World pass 2 — objects (7 Oct, branch world-objects, not merged)
+- main: world-mesh merged (32f228d, no conflicts), backup tag pre-world-mesh-merge. Push both from the Mac (this session has no GitHub login).
+- Default tilt 40° (range 40–80 and [ ] keys unchanged).
+- Trees are now objects: every painted tree (forest clumps + edge trees, orchards, lone meadow trees, farm trees) becomes an upright camera-facing billboard from the props atlas, all in one instanced draw plus one draw for soft east-falling ground shadows. Static (no sway). Whole 3D frame = 7 draw calls.
+- render_art.js: paintArtFeatures takes an optional objs list; in the 3D view trees are collected there instead of painted, with the same random order, so every other prop stays exactly where the minimap shows it. The minimap and flat map still paint trees as before.
+- Mill: bldg_mill object on the west bank by Stone Bridge (hex 6,10), visual only (no mill exists in the map data; John chose the spot). It overlaps the end of the "Stone Bridge" label and sits on the road verge; nudge MILL.dx/dy in render3d.js if wanted.
+- Units: own units + the enemy foot/horse the game already shows you mark their hexes; there half the trees vanish and the rest are ~60% height. Hidden enemies never thin the woods. Picking still marches the height field only, so trees never catch clicks (6/6 hexes).
+- Creek bank: ground shader adds a ragged, noise-edged band of damp grass → creek-bank mud along the creek mask. Water shader/flipbook untouched.
+- Still painted (props layer): roads, sunken-lane marks, stone walls, fences, town and farm buildings, well, haystacks, woodpile, wheat sheaves, boulders, stumps, bridge, ford stones, swamp reeds/pools, earthworks, creek and brook paint, stream reeds, supply wagons, labels.
+- Now objects: all trees, the mill.
+- Shots: docs/shots/wo_valley40.jpg, wo_creek_bank.jpg.

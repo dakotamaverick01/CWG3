@@ -122,7 +122,7 @@ CW.prop = function (ctx, name, x, y, w, flip = false, rot = 0) {
   ctx.drawImage(A.props, sx, sy, sw, sh, -ax * sw * s, -ay * sh * s, sw * s, sh * s); ctx.restore();
 };
 
-CW.paintArtFeatures = function (ctx, M, rand, pat, wet) {
+CW.paintArtFeatures = function (ctx, M, rand, pat, wet, objs) {   // objs (3D view only): trees are collected as objects instead of painted; same rand order, so every other prop lands where the minimap shows it
   CW.WATER = { river: null, rw: 0, streams: [] };   // session 17a: water paths recorded for the 3D flow mask (data only)
   const R = CW.R, P = CW.prop, each = (t, fn) => M.all.forEach(([c, r]) => { if (M.ter(c, r) === t) fn(...CW.center(c, r), c, r); }), sprites = [];
   const put = (y, fn) => sprites.push([y, fn]); // upright objects, drawn back-to-front after the flat stuff
@@ -177,6 +177,7 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet) {
   // batch 2: painted trees (Grok sheets 11-12) — woodland clumps fill forest hexes, single trees on the edges, orchards in rows
   const TF = CW.ARTI && CW.ARTI.frames;
   if (TF && TF.wood_clump_a && TF.tree_oak) {
+    const PT = objs ? (c, n, x, y, w, f) => objs.trees.push([n, x, y, w, !!f]) : P;
     const T = (c, r) => M.in(c, r) ? M.ter(c, r) : null, pick = a => a[rand() * a.length | 0];
     // batch 3: summer trees (5 sheets) when loaded; a rare red maple / dogwood as colour accents
     const SU = TF.sta_oak && CW.SEASON !== 'autumn', has = n => TF[n], L = a => a.filter(has);
@@ -188,13 +189,13 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet) {
     const accent = n => SU && rand() < .03 && has('ste_red_maple') ? 'ste_red_maple' : n;
     each('f', (x, y, c, r) => { const edge = M.nbrs(c, r).some(([a, b]) => T(a, b) !== 'f');
       for (let i = 0; i < 7; i++) { const px = x + (rand() - .5) * R * 1.7, py = y + (rand() - .5) * R * 1.5 + R * .35;
-        put(py - 20, () => P(ctx, pick(P_CLUMP), px, py, R * (1.15 + rand() * .5), rand() < .5)); }
+        put(py - 20, () => PT(ctx, pick(P_CLUMP), px, py, R * (1.15 + rand() * .5), rand() < .5)); }
       if (edge) for (let i = 0; i < 2; i++) { const px = x + (rand() - .5) * R * 1.4, py = y + (rand() - .2) * R * .9 + R * .4;
-        put(py - 19, () => P(ctx, accent(pick(P_EDGE)), px, py, R * (.8 + rand() * .3), rand() < .5)); } });
+        put(py - 19, () => PT(ctx, accent(pick(P_EDGE)), px, py, R * (.8 + rand() * .3), rand() < .5)); } });
     each('o', (x, y) => { for (let j = -1; j <= 1; j++) { const py = y + j * R * .5 + R * .25;
-      for (let i = -1; i <= 1; i++) { const px = x + i * R * .5 + (j & 1) * R * .22; put(py - 19, () => P(ctx, P_ORCH ? pick(P_ORCH) : rand() < .8 ? 'wood_apple' : 'wood_peach', px, py, R * .55, rand() < .5)); } } });
-    each('g', (x, y) => { if (rand() < .07) { const px = x + (rand() - .5) * R, py = y + (rand() - .5) * R * .8 + R * .3; put(py, () => P(ctx, accent(pick(P_LONE)), px, py, R * (.8 + rand() * .3), rand() < .5)); } });
-    each('h', (x, y) => { if (rand() < .5) { const px = x + R * .45, py = y - R * .1; put(py, () => P(ctx, pick(P_FARM), px, py, R * .8, rand() < .5)); } });
+      for (let i = -1; i <= 1; i++) { const px = x + i * R * .5 + (j & 1) * R * .22; put(py - 19, () => PT(ctx, P_ORCH ? pick(P_ORCH) : rand() < .8 ? 'wood_apple' : 'wood_peach', px, py, R * .55, rand() < .5)); } } });
+    each('g', (x, y) => { if (rand() < .07) { const px = x + (rand() - .5) * R, py = y + (rand() - .5) * R * .8 + R * .3; put(py, () => PT(ctx, accent(pick(P_LONE)), px, py, R * (.8 + rand() * .3), rand() < .5)); } });
+    each('h', (x, y) => { if (rand() < .5) { const px = x + R * .45, py = y - R * .1; put(py, () => PT(ctx, pick(P_FARM), px, py, R * .8, rand() < .5)); } });
   }
   // trees: long shadows first, then canopies with gold rim light (code-drawn fallback)
   const trees = []; if (!(TF && TF.wood_clump_a && TF.tree_oak)) {
