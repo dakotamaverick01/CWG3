@@ -274,7 +274,9 @@ CW.R3 = (function () {
   function buildGround(img) {
     let feat = null; try { if (buildGroundTex()) { buildGroundWeights(); feat = buildFeatures(); } } catch (e) { console.warn('tiled ground skipped, painted map in use:', e.message); feat = null; }
     if (feat && CW.WORLD) { feat.getContext('2d').clearRect(0, 0, feat.width, feat.height); S.trees = []; }   // T1: paint layer hidden, ground = hex letters only
-    U.uGround.value = feat ? 1 : 0; try { buildObjects(feat ? S.trees || [] : []); } catch (e) { console.warn('3D trees skipped:', e.message); } if (S.feat && S.feat !== feat) { S.feat.width = S.feat.height = 0; } S.feat = feat;
+    U.uGround.value = feat ? 1 : 0; try { buildObjects(feat ? S.trees || [] : []); } catch (e) { console.warn('3D trees skipped:', e.message); }
+    if (CW.WORLD && CW.WorldTrees) { if (S.wt) { CW.WorldTrees.dispose(); S.wt = 0; } try { if (!S.occ || S.occ.image.width !== M.cols || S.occ.image.height !== M.rows) { S.occ = new THREE.DataTexture(new Uint8Array(M.cols * M.rows * 4), M.cols, M.rows, THREE.RGBAFormat); S.occ.needsUpdate = true; if (S.objs) S.objs.forEach(o => { if (o.material.uniforms.uOcc) o.material.uniforms.uOcc.value = S.occ; }); }
+      S.wt = CW.WorldTrees.build({ scene, M, W3, occ: S.occ, U }); S.occKey = null; } catch (e) { console.warn('tree meshes skipped:', e.message); } }   // T2: mesh trees from hex letters if (S.feat && S.feat !== feat) { S.feat.width = S.feat.height = 0; } S.feat = feat;
     ttex.image = feat || img; ttex.needsUpdate = true; }
   // ---------- world pass 2: trees and the mill as objects standing on the mesh ----------
   // Upright camera-facing billboards from the props atlas, all trees in ONE instanced draw (plus one for their soft ground shadows).

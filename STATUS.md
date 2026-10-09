@@ -402,3 +402,10 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Revert: set CW.WORLD = false (top of render3d.js), or open play.html?world=0 to compare.
 - Shots: docs/shots/world_t1_paint_on.jpg (old look), world_t1_paint_off.jpg (spike).
 - Found: 3D water mask still depends on CW.WATER recorded by the painted pass; T6 must replace it. Not merged; John reviews first.
+
+## 2026-10-09 — WORLD T2 (tree meshes), branch world-t2-tree-meshes (stacked on world-t1-recipe-spike)
+- Trees are now 3 real meshes (Kenney Nature Kit, CC0: oak broadleaf, tall pine, bush), baked to assets/art/tree_meshes.js by tools/build_tree_meshes.py (base64, works on double-click).
+- New src/world_trees.js places them from hex letters only: forest f = 9 mixed trees/hex, orchard o = 3x3 rows of small broadleaf; random yaw + size; seeded per hex. Instanced: 3 draws + 3 shadow draws. Active only when CW.WORLD is on.
+- Thinning where a unit stands (half vanish, rest 62% height) and slow sway only while Living is on (off = frozen, same layout).
+- Hook: 1 block in render3d.js buildGround; 2 script tags in play.html. Revert: CW.WORLD = false (billboards return) or drop the branch.
+- Shots: docs/shots/world_t2_woods40.jpg, world_t2_woods62.jpg, world_t2_open_field.jpg. Not merged; stacked on T1 because T2 needs CW.WORLD.

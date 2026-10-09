@@ -71,3 +71,4 @@ John's work usage comes first. Run T1 only if a 5-hour window is free. Do not st
 ---
 Progress (Claude marks tasks only):
 - T1 — done test passed 2026-10-09, branch `world-t1-recipe-spike`; awaiting John's review. Not merged.
+- T2 — done test passed 2026-10-09, branch `world-t2-tree-meshes` (stacked on T1); awaiting John's review. Not merged.

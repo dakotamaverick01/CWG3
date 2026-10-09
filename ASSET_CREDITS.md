@@ -17,3 +17,4 @@ Every outside asset gets a row before it's used. Only CC0, CC-BY, OFL, public do
 
 | Kenney Smoke Particles (white puff, black smoke, explosion, flash) | kenney.nl/assets/smoke-particles | CC0 | Battle smoke/flash FX (session 20) |
 | Poly Haven grass_ground_diff_1k.jpg (by Charlotte Baglioni) and leafy_grass_diff_1k.jpg | Millbrook meadow ground layers (assets/art/ground/cc0) | Poly Haven: https://polyhaven.com/a/grass_ground , https://polyhaven.com/a/leafy_grass | CC0 | grass_ground by Charlotte Baglioni |
+| Kenney Nature Kit 2.1 (tree_oak, tree_pineTallA, plant_bush meshes, recoloured; baked into assets/art/tree_meshes.js) | kenney.nl/assets/nature-kit | CC0 | Mesh trees for forest/orchard hexes (WORLD T2); baked by tools/build_tree_meshes.py |
