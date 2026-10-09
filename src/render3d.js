@@ -27,7 +27,7 @@ CW.R3 = (function () {
   const CC0 = {}; for (const n in CC0_DATA) { const im = new Image(); CC0[n] = im;
     im.onload = im.onerror = () => { CC0[n] = im; if (!U.uGA.value && CW.resetMap) CW.resetMap(); };
     im.src = location.protocol === 'file:' ? CC0_DATA[n] : 'assets/art/ground/cc0/' + n + '.jpg'; }
-  const GROUND_LAYERS = [['grass_ground_diff_1k', 'sgb_0', 'rocky_3'], ['leafy_grass_diff_1k', 'sgc_0', 'rocky_3'], ['crpb_1', 'wheat_0'], ['crpa_0', 'corn_0'], ['rocky_3'], ['farmyard_1'], ['rocky_1'], ['mud_3'], ['slpa_3', 'mud_0']];
+  const GROUND_LAYERS = [['grass_ground_diff_1k', 'sgb_0', 'rocky_3'], ['leafy_grass_diff_1k', 'sgc_0', 'rocky_3'], ['crpb_1', 'wheat_0'], ['crpa_0', 'corn_0'], ['rocky_2'], ['farmyard_1'], ['rocky_1'], ['mud_3'], ['slpa_3', 'mud_0']];
   // channel per terrain letter: 0 grass, 1 wheat, 2 corn, 3 woods floor, 4 dirt, 5 knoll, 6 swamp, 7 creek bank (creek hexes are half grass)
   const GROUND_CH = { g: [[0, 1]], o: [[0, 1]], f: [[3, 1]], h: [[4, 1]], t: [[4, 1]], x: [[4, 1]], k: [[5, 1]], s: [[6, 1]], w: [[7, .5], [0, .5]], b: [[7, .5], [0, .5]], d: [[7, .5], [0, .5]] };
   const GLSL_GROUND = `

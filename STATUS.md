@@ -415,3 +415,9 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Safety net: on slow frames the board first renders at lower resolution (1 -> 0.8 -> 0.65), only then does the guard switch Living off. play.html?fullres disables the step-down (for comparing).
 - Still heavy per pixel (not done): creek-bank 16 water taps everywhere, two 4-step noise fields (cwF).
 - Logged John's 3 UI/unit notes in ops/NOTES_FOR_GROK.md (not started: outside WORLD_PLAN).
+
+## 2026-10-09 — WORLD T3 (ground set), on main
+- Changed one slot in GROUND_LAYERS (src/render3d.js): woods floor uses rocky_2 (brown leaf litter, already in repo) instead of rocky_3 (green grass tufts, same green as the meadow).
+- Other letters unchanged: meadow, wheat_0, corn_0, farmyard_1 (dirt), rocky_1 (rock), mud_3 (swamp), mud_0 (river bed). No new files, so no ASSET_CREDITS change. Lighting and tint untouched.
+- Done test: pre/after screenshots of the same woods view: gaps went from dark green to warm brown litter (docs/shots/world_t3_woods_pre_after.jpg).
+- Limit: the repo has no dedicated CC0 leaf-litter texture; a truer woods floor needs a new download, John's OK first.
