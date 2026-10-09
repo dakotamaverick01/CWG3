@@ -395,3 +395,10 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Ground shader only: meadow layers tinted green (CC0 photos are yellow-brown); pow(col, 0.84)+0.025 lifts shadows; warm grade 1.08/1.0/0.84 -> 1.02/1.0/0.93; woods floor 0.50,0.60,0.36 -> 0.80,0.90,0.64.
 - Over http it loads the files; on file:// it uses 512 px base64 copies embedded in render3d.js (CC0_DATA). Wheat, corn, dirt, rock, water, units untouched.
 - Revert: in GROUND_LAYERS put 'sgb_0' and 'sgc_0' back as the first entries of slots 0 and 1 (and the shader lines above).
+
+## 2026-10-09 — WORLD T1 (recipe + paint-off spike), branch world-t1-recipe-spike
+- New docs/WORLD_RECIPE.md: map-file inputs (terrain letter, height, edges, roads) -> outputs (ground, water, vegetation, edge pieces, structures), plus the list of Millbrook-only paths still to remove. Plan stored at docs/WORLD_PLAN.md.
+- src/render3d.js: flag CW.WORLD (true on this branch). On = painted props layer blanked, painted-coordinate trees dropped, hard-coded mill skipped; ground comes from hex letters only. Water/forest masks, units, camera, minimap untouched.
+- Revert: set CW.WORLD = false (top of render3d.js), or open play.html?world=0 to compare.
+- Shots: docs/shots/world_t1_paint_on.jpg (old look), world_t1_paint_off.jpg (spike).
+- Found: 3D water mask still depends on CW.WATER recorded by the painted pass; T6 must replace it. Not merged; John reviews first.

@@ -4,6 +4,9 @@
 // over the hills, (3) units drawn by game.js on the normal 2D canvas on top, each placed where its hex appears on screen.
 // G.cam keeps its old meaning (screen = map * z + x/y at the screen centre); this file turns it into a tilted camera.
 // Flat map option (G.opts.flat) or any WebGL failure → game.js falls back to the classic top-down drawing.
+// T1 spike (WORLD_PLAN): CW.WORLD = true hides the painted props layer (and the Millbrook-only mill) and draws the ground from the hex letters alone.
+// Revert = set CW.WORLD = false here (or open play.html?world=0 to compare without editing).
+CW.WORLD = true; try { if (/[?&]world=0\b/.test(location.search)) CW.WORLD = false; } catch (e) {}
 CW.R3 = (function () {
   const EX = 30, FOV = 30, TILT_MIN = 40, TILT_MAX = 80, TILT_DEF = 40;   // EX = height of one level in map px (hex radius 44)
   let ok = false, failed = false, ren, scene, cam, dcv, dctx, dtex, ttex, terrainSrc = null, M, MW, MH, HW, HH, HF, glc;
@@ -270,6 +273,7 @@ CW.R3 = (function () {
     const objs = { trees: [] }; CW.paintArtFeatures(x, M, CW.rng(11), pat, wet, objs); S.trees = objs.trees; return c; }
   function buildGround(img) {
     let feat = null; try { if (buildGroundTex()) { buildGroundWeights(); feat = buildFeatures(); } } catch (e) { console.warn('tiled ground skipped, painted map in use:', e.message); feat = null; }
+    if (feat && CW.WORLD) { feat.getContext('2d').clearRect(0, 0, feat.width, feat.height); S.trees = []; }   // T1: paint layer hidden, ground = hex letters only
     U.uGround.value = feat ? 1 : 0; try { buildObjects(feat ? S.trees || [] : []); } catch (e) { console.warn('3D trees skipped:', e.message); } if (S.feat && S.feat !== feat) { S.feat.width = S.feat.height = 0; } S.feat = feat;
     ttex.image = feat || img; ttex.needsUpdate = true; }
   // ---------- world pass 2: trees and the mill as objects standing on the mesh ----------
@@ -302,7 +306,7 @@ CW.R3 = (function () {
     if (S.objs) { S.objs.forEach(m => { scene.remove(m); }); S.objs[0].geometry.dispose(); S.objs[1].geometry.dispose(); S.objs = null; }
     const A = CW.ARTI, F = A && A.frames; if (!F || !A.props || !A.props.naturalWidth) return;
     const AW = A.props.naturalWidth, AH = A.props.naturalHeight, list = trees.slice();
-    if (M.in(...MILL.hex) && F[MILL.frame]) { const [x, y] = CW.center(...MILL.hex); list.push([MILL.frame, x + MILL.dx * CW.R, y + MILL.dy * CW.R, MILL.w * CW.R, false, true]); }
+    if (!CW.WORLD && M.in(...MILL.hex) && F[MILL.frame]) { const [x, y] = CW.center(...MILL.hex); list.push([MILL.frame, x + MILL.dx * CW.R, y + MILL.dy * CW.R, MILL.w * CW.R, false, true]); }
     const n = list.length, base = new Float32Array(n * 3), uv = new Float32Array(n * 4), sz = new Float32Array(n * 4), hx = new Float32Array(n), rn = new Float32Array(n), rnd = CW.rng(23);
     list.forEach(([nm, x, y, w, flip, fixed], i) => { const f = F[nm]; if (!f) { sz[i * 4] = 0; return; } const [sx, sy, sw, sh, ax, ay] = f, b = W3(x, y);
       base.set([b.x, b.y - 1.5, b.z], i * 3); uv.set([sx / AW, sy / AH, sw / AW, sh / AH], i * 4);
