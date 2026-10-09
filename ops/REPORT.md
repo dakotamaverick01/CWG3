@@ -1,28 +1,25 @@
 # REPORT (Claude's result for the last brief) — overwritten after each task
-Brief: WORLD_PLAN T2 — Tree meshes
-Branch / commit: world-t2-tree-meshes (stacked on world-t1-recipe-spike, because CW.WORLD lives there)
+Brief: John: "merge everything" (WORLD T1 + T2 + slow-frame fix)
+Branch / commit: main (merge of world-t2-tree-meshes [includes T1] and perf-ground-shader)
 Result: DONE
 
 ## What changed (≤5 lines)
-- Camera-facing tree billboards replaced by 3 Kenney Nature Kit meshes (broadleaf, pine, bush), instanced, random yaw and size.
-- Placement from forest/orchard hex letters only (src/world_trees.js), seeded per hex; no painted coordinates.
-- Unit thinning (same rule as before) and slow sway only while Living is on.
-- Runs only with CW.WORLD on; with it off the old billboards are untouched.
+- Merged into main: T1 recipe + CW.WORLD paint-off, T2 mesh trees, ground-shader speed-up with resolution step-down.
+- Backup tag before the merge: backup-main-before-world-2026-10-09 (roll back with: git reset --hard that tag).
+- Per-task reports are in STATUS.md (three newest sections) and docs/WORLD_PLAN.md progress lines.
 
 ## Files touched
-src/world_trees.js (new), assets/art/tree_meshes.js (new, 39 KB), tools/build_tree_meshes.py (new), src/render3d.js (1 block), play.html (2 script tags), ASSET_CREDITS.md, STATUS.md, docs/shots/world_t2_*.jpg
+src/render3d.js, src/world_trees.js, assets/art/tree_meshes.js, tools/build_tree_meshes.py, play.html, docs/WORLD_RECIPE.md, docs/WORLD_PLAN.md, STATUS.md, ASSET_CREDITS.md, ops/*
 
 ## How to revert
-Set CW.WORLD = false (top of src/render3d.js) to get the old billboard trees back, or delete the branch.
+git reset --hard backup-main-before-world-2026-10-09 (then force-push only with John's OK), or set CW.WORLD = false for the old look.
 
 ## Evidence (screenshot path / measurements)
-docs/shots/world_t2_woods40.jpg and world_t2_woods62.jpg: same eastern woods at 40° and 62° tilt, trees read as volumes from both. world_t2_open_field.jpg: meadow, road and units, no trees. Headless Chromium on file://, no console errors or warnings. Software GL, so check feel and speed on the Mac.
-Not verified by screenshot: the thinning around a unit and the sway (the software renderer switched Living off, as expected). The code reuses the old occupancy texture and the Living uniform.
+See docs/shots/world_t1_*.jpg, world_t2_*.jpg. Merged build load-tested headless (see below if added).
 
 ## Open questions for John / Grok
-1. Look: the kit's flat-shaded cartoon trees are brighter and cleaner than the old painted woods. A darker, less saturated palette is a one-line change in tools/build_tree_meshes.py. Want it darker?
-2. Pine is the kit's slim "tall" pine; there is also a fuller one if you want more bulk.
-3. Stacked on T1 (not branched from main) because T2 needs CW.WORLD; merge T1 first.
+1. Does the 44 ms warning still appear on the Mac after pulling?
+2. T3 (Ground set) is next in WORLD_PLAN when John says go.
 
 ## Suggested next brief (one line)
-T3 — Ground set (Haiku), after John accepts T2.
+T3 — Ground set (Haiku in the plan).

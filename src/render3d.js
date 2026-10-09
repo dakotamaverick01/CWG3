@@ -10,7 +10,8 @@ CW.WORLD = true; try { if (/[?&]world=0\b/.test(location.search)) CW.WORLD = fal
 CW.R3 = (function () {
   const EX = 30, FOV = 30, TILT_MIN = 40, TILT_MAX = 80, TILT_DEF = 40;   // EX = height of one level in map px (hex radius 44)
   let ok = false, failed = false, ren, scene, cam, dcv, dctx, dtex, ttex, terrainSrc = null, M, MW, MH, HW, HH, HF, glc;
-  const S = { tilt: TILT_DEF, anim: null, last: null, live: false, raf: 0, prev: 0, acc: 0, n: 0, win0: 0, mats: [], wk: new Map(), src: null, threads: null };
+  const FULLRES = /[?&]fullres\b/.test(location.search);   // play.html?fullres keeps full board resolution (no automatic step-down)
+  const S = { res: 1, dpr0: 0, tilt: TILT_DEF, anim: null, last: null, live: false, raf: 0, prev: 0, acc: 0, n: 0, win0: 0, mats: [], wk: new Map(), src: null, threads: null };
   // ---------- living landscape (sessions 17a-b, 18, 19): cloud shadows, 3D creek + wake, wind in the wheat, brook thread, tree sway, warm haze; one time uniform, patched into the ground material ----------
   const U = { uT: { value: 0 }, uLive: { value: 0 }, uWater: { value: null }, uForest: { value: null }, uWheatM: { value: null }, uWheatA: { value: null }, uWheatAvg: { value: window.THREE ? new THREE.Vector3(.31, .22, .084) : null }, uWheatOn: { value: 0 }, uMap: { value: window.THREE ? new THREE.Vector2(1, 1) : null },
     uGround: { value: 0 }, uGA: { value: null }, uGW0: { value: null }, uGW1: { value: null } };   // world-mesh pass: tiled ground textures + terrain weight maps
@@ -44,11 +45,15 @@ CW.R3 = (function () {
       vec4 a = texture2D(uGW0, wp / uMap), b = texture2D(uGW1, wp / uMap);
       float sw = max(dot(a, vec4(1.0)) + dot(b, vec4(1.0)), 1e-3); a /= sw; b /= sw;                         // weights sum to 1, so no seam can open a gap
       float w[8]; w[0] = a.r; w[1] = a.g; w[2] = a.b; w[3] = a.a; w[4] = b.r; w[5] = b.g; w[6] = b.b; w[7] = b.a;
-      float m = 0.0;
-      for (int i = 0; i < 8; i++) { w[i] += 0.32 * (cwN(p / 26.0 + float(i) * 13.7) * 0.65 + cwN(p / 9.0 + float(i) * 7.3) * 0.35 - 0.5); m = max(m, w[i]); }
-      vec3 col = vec3(0.0); float t = 0.0;
-      for (int i = 0; i < 8; i++) { float f = max(w[i] - m + 0.12, 0.0); if (f > 0.0) { col += f * cwLayer(i, p); t += f; } }   // ragged, noisy borders
-      col /= max(t, 1e-4);
+      float mx = 0.0; int di = 0; for (int i = 0; i < 8; i++) if (w[i] > mx) { mx = w[i]; di = i; }
+      vec3 col = vec3(0.0);
+      if (mx > 0.9) col = cwLayer(di, p);   // perf: inside a hex one terrain owns the pixel; the noisy blend below could only ever return this same layer (proof: others <= 0.1 + 0.16 noise, owner >= 0.9 - 0.16), so skip its 16 noise lookups
+      else {
+        float m = 0.0;
+        for (int i = 0; i < 8; i++) { w[i] += 0.32 * (cwN(p / 26.0 + float(i) * 13.7) * 0.65 + cwN(p / 9.0 + float(i) * 7.3) * 0.35 - 0.5); m = max(m, w[i]); }
+        float t = 0.0;
+        for (int i = 0; i < 8; i++) { float f = max(w[i] - m + 0.12, 0.0); if (f > 0.0) { col += f * cwLayer(i, p); t += f; } }   // ragged, noisy borders
+        col /= max(t, 1e-4); }
       // world pass 2: creek bank — a ragged, noisy grass-to-mud band near the water (creek mask uWater, 16 taps at two radii)
       float wb = 0.0; for (int k = 0; k < 8; k++) { float an = float(k) * 0.785 + 0.4; vec2 o = vec2(cos(an), sin(an));
         wb += texture2D(uWater, (p + o * 16.0) / uMap).a + texture2D(uWater, (p + o * 34.0) / uMap).a; }
@@ -341,7 +346,9 @@ CW.R3 = (function () {
     if (now - S.prev < 32) return;
     const dt = now - S.prev; S.prev = now;
     S.acc += Math.min(dt, 500); S.n++; if (!S.win0) S.win0 = now;   // one long stall (map repaint) can't trip it alone; a slow machine can
-    if (now - S.win0 >= 3000) { const avg = S.n ? S.acc / S.n : 0; S.avg = avg; S.acc = S.n = 0; S.win0 = now; if (avg > 40 && S.onSlow) { S.onSlow(avg); return; } }
+    if (now - S.win0 >= 3000) { const avg = S.n ? S.acc / S.n : 0; S.avg = avg; S.acc = S.n = 0; S.win0 = now; if (avg > 40) {   // slow: first draw the board at lower resolution (1 -> 0.8 -> 0.65 of the usual pixels per side), only then give up the living landscape
+        if (S.res > 0.7 && S.dpr0 && S.last && !FULLRES) { S.res = S.res > 0.9 ? 0.8 : 0.65; ren.setPixelRatio(S.dpr0 * S.res); ren.setSize(S.last.w, S.last.h, false); try { ren.render(scene, cam); } catch (e) {} console.info('CWG3: slow frames (' + Math.round(avg) + ' ms), board resolution now ' + S.res); return; }
+        if (S.onSlow) { S.onSlow(avg); return; } } }
     U.uT.value = now / 1000; warmFog();
     try { if (CW.WAKE && CW.WAKE.ok) { feedWake(Math.min(dt, 100) / 1000); CW.WAKE.step(Math.min(dt, 100) / 1000, cam, MW, MH); } ren.render(scene, cam); } catch (e) { fail(e.message); }
   }
@@ -430,7 +437,7 @@ CW.R3 = (function () {
     S.last = { w, h }; }
   function render(gc, w, h, dpr, terrainImg) {
     if (!ok) return false;
-    try { tex(terrainImg); dpr = Math.min(dpr, 1.5);   // session 19d: Retina draws the 3D board at 1.5x, not 2x (about 44% fewer pixels); units stay sharp on their own canvas
+    try { tex(terrainImg); dpr = Math.min(dpr, 1.5); S.dpr0 = dpr; dpr *= S.res;   // session 19d: Retina draws the 3D board at 1.5x, not 2x (about 44% fewer pixels); units stay sharp on their own canvas
       if (ren.getPixelRatio() !== dpr || ren.domElement.width !== Math.round(w * dpr) || ren.domElement.height !== Math.round(h * dpr)) { ren.setPixelRatio(dpr); ren.setSize(w, h, false); }
       place(gc, w, h); updateOcc(); dtex.needsUpdate = true; U.uT.value = performance.now() / 1000; warmFog(); ren.render(scene, cam); return true; }
     catch (e) { fail(e.message); return false; }

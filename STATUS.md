@@ -409,3 +409,9 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Thinning where a unit stands (half vanish, rest 62% height) and slow sway only while Living is on (off = frozen, same layout).
 - Hook: 1 block in render3d.js buildGround; 2 script tags in play.html. Revert: CW.WORLD = false (billboards return) or drop the branch.
 - Shots: docs/shots/world_t2_woods40.jpg, world_t2_woods62.jpg, world_t2_open_field.jpg. Not merged; stacked on T1 because T2 needs CW.WORLD.
+## 2026-10-09 — Slow-frame fix (ground shader), branch perf-ground-shader (off main)
+- John's Mac showed "Living landscape switched off: ~44 ms" on main too, so it is the ground shader, not the new trees.
+- render3d.js cwGround: inside a hex (top terrain weight > 0.9) skip the 16 noise lookups; result is identical (proof in the code comment). Software-renderer bench: ~1.8 s -> ~1.0 s per frame (about 45% less). Pixel diff vs main: ground unchanged.
+- Safety net: on slow frames the board first renders at lower resolution (1 -> 0.8 -> 0.65), only then does the guard switch Living off. play.html?fullres disables the step-down (for comparing).
+- Still heavy per pixel (not done): creek-bank 16 water taps everywhere, two 4-step noise fields (cwF).
+- Logged John's 3 UI/unit notes in ops/NOTES_FOR_GROK.md (not started: outside WORLD_PLAN).
