@@ -10,3 +10,4 @@ Project: browser remake of *Robert E. Lee: Civil War Generals 2*. Owner: John (h
 6. Assets: own, open-source or CC0 only; log in `ASSET_CREDITS.md`.
 7. Budget rules: read only needed files, screenshots once at the end, stop and ask after 2 failed fixes, keep chat short.
 8. Old docs live in `docs/archive/` — don't trust them. Specs in `docs/` (RULES_SPEC, COMBAT, AI_DESIGN, TERRAIN_DESIGN, ART_PIPELINE) are current references.
+9. Suggest the use of plugins, tools, connectors, skills or other open-source content or utilities to improve our workflow and output.
