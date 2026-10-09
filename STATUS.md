@@ -395,3 +395,10 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Ground shader only: meadow layers tinted green (CC0 photos are yellow-brown); pow(col, 0.84)+0.025 lifts shadows; warm grade 1.08/1.0/0.84 -> 1.02/1.0/0.93; woods floor 0.50,0.60,0.36 -> 0.80,0.90,0.64.
 - Over http it loads the files; on file:// it uses 512 px base64 copies embedded in render3d.js (CC0_DATA). Wheat, corn, dirt, rock, water, units untouched.
 - Revert: in GROUND_LAYERS put 'sgb_0' and 'sgc_0' back as the first entries of slots 0 and 1 (and the shader lines above).
+
+## 2026-10-09 — Slow-frame fix (ground shader), branch perf-ground-shader (off main)
+- John's Mac showed "Living landscape switched off: ~44 ms" on main too, so it is the ground shader, not the new trees.
+- render3d.js cwGround: inside a hex (top terrain weight > 0.9) skip the 16 noise lookups; result is identical (proof in the code comment). Software-renderer bench: ~1.8 s -> ~1.0 s per frame (about 45% less). Pixel diff vs main: ground unchanged.
+- Safety net: on slow frames the board first renders at lower resolution (1 -> 0.8 -> 0.65), only then does the guard switch Living off. play.html?fullres disables the step-down (for comparing).
+- Still heavy per pixel (not done): creek-bank 16 water taps everywhere, two 4-step noise fields (cwF).
+- Logged John's 3 UI/unit notes in ops/NOTES_FOR_GROK.md (not started: outside WORLD_PLAN).
