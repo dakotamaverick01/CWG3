@@ -379,3 +379,10 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Still painted (props layer): roads, sunken-lane marks, stone walls, fences, town and farm buildings, well, haystacks, woodpile, wheat sheaves, boulders, stumps, bridge, ford stones, swamp reeds/pools, earthworks, creek and brook paint, stream reeds, supply wagons, labels.
 - Now objects: all trees, the mill.
 - Shots: docs/shots/wo_valley40.jpg, wo_creek_bank.jpg.
+
+## 2026-10-09 — Meadow ground swap (CC0)
+- Changed: src/render3d.js GROUND_LAYERS meadow slots 0/1 now use Poly Haven CC0 photos.
+- Files: assets/art/ground/cc0/grass_ground_diff_1k.jpg and leafy_grass_diff_1k.jpg (credits in ASSET_CREDITS.md).
+- Ground shader only: meadow layers tinted green (CC0 photos are yellow-brown); pow(col, 0.84)+0.025 lifts shadows; warm grade 1.08/1.0/0.84 -> 1.02/1.0/0.93; woods floor 0.50,0.60,0.36 -> 0.80,0.90,0.64.
+- Over http it loads the files; on file:// it uses 512 px base64 copies embedded in render3d.js (CC0_DATA). Wheat, corn, dirt, rock, water, units untouched.
+- Revert: in GROUND_LAYERS put 'sgb_0' and 'sgc_0' back as the first entries of slots 0 and 1 (and the shader lines above).
