@@ -4,7 +4,7 @@ Project: browser remake of *Robert E. Lee: Civil War Generals 2*. Owner: John (h
 
 1. Read `STATUS.md` → "START HERE" block first. Then `ops/BRIEF.md` (the current directive from John/Grok). Read nothing else unless the brief needs it.
 2. Do exactly what `BRIEF.md` says; respect its "Do not touch" list and "Done when". If it's ambiguous or contradicts the code, stop and ask John (multiple choice).
-3. When finished, overwrite `ops/REPORT.md` (template inside), update the START HERE block only if the state changed, commit, push the branch. Never push or merge to `main` without John's OK.
+3. When finished, overwrite `ops/REPORT.md` (template inside), update the START HERE block only if the state changed, commit, push the branch. Work and push directly on `main` (John's standing OK, 9 Oct: he wants branches only when absolutely necessary). Tag main first before any big or risky change so it can be rolled back; use a branch only if John asks or the change is risky enough to review first. Never force-push.
 4. Run/screenshot/push recipe: skill `cwg3-run-and-verify`. Gitignored build outputs (`assets/art/art.js`, `kit.js`, `scenery.js`) are NOT in a fresh clone: rebuild with `python3 -I tools/intake.py && python3 -I tools/build_kit.py` (~1 min), then `git checkout -- assets && git clean -fdq assets` to drop rewritten tracked files.
 5. John opens `play.html` by double-click (file://): art must be base64-embedded; test as file://.
 6. Assets: own, open-source or CC0 only; log in `ASSET_CREDITS.md`.
