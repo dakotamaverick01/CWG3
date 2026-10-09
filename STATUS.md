@@ -8,6 +8,8 @@
 - **Branches:** `main` = through world-mesh. `world-objects` = trees + mill + CC0 meadow, pushed, not merged. Merge to main only after John reviews screenshots (backup tag first); John can merge from the GitHub phone app.
 - **Open items (last noted):** wire title/menu/after-action art (`assets/incoming/title/`); AI moves glide one at a time; check sluggishness on the Mac; next world pass not chosen yet.
 - **Plan and docs:** `WORK_PLAN.md` (v3, 27 Sep; out of date on the 3D direction), `docs/`, `plan/`. `HANDOFF_PROMPT.md` still describes the old battalion/standing-orders design, so don't trust its "how it plays" section. Newest session notes are at the BOTTOM of this file: read only the last 3 sections.
+- **Directives:** `CLAUDE.md` (auto-loaded rules), `ops/BRIEF.md` (current task from John/Grok), `ops/REPORT.md` (Claude's result), `ops/GROK_PRIMER.md` (paste into Grok).
+- **Build outputs:** `assets/art/art.js`, `kit.js`, `scenery.js` are gitignored; a fresh cloud clone must run `python3 -I tools/intake.py && python3 -I tools/build_kit.py` (~1 min), then `git checkout -- assets && git clean -fdq assets`. Rebuilt art may differ slightly from John's Mac copy.
 - **Run, verify, commit, push:** use the `cwg3-run-and-verify` skill.
 - **Assets:** own, open-source or CC0 only; log every source in `ASSET_CREDITS.md`.
 - **John's rules:** short replies, explain new jargon, multiple-choice questions, read only needed files, screenshots once at the end, stop and ask after 2 failed fixes.
