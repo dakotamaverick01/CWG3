@@ -1,26 +1,27 @@
 # REPORT (Claude's result for the last brief) — overwritten after each task
-Brief: WORLD_PLAN T4 — Edges
+Brief: WORLD_PLAN T5 — Structures (+ John's brook feedback)
 Branch / commit: main
 Result: DONE
 
 ## What changed (≤5 lines)
-- Roads, brooks, walls, fences are built from the map data as 3D pieces (new src/world_edges.js, assets/art/edge_meshes.js); the painted versions are skipped when CW.WORLD is on.
-- Roads/brooks = continuous ribbons draped on the terrain; fences = Kenney rail fence pitched to the slope; walls = Kenney stones along each hex edge.
-- Painted layer restored for buildings, crops, bridge, ford, labels (T1 had hidden all of it).
+- Town, farm, bridge, ford, fort, knolls and the mill are 3D Kenney pieces placed from hex letters (new src/world_structures.js + assets/art/struct_meshes.js); recipe table in docs/WORLD_RECIPE.md section 6.
+- The mill hex now lives in the map file (`structures:[[6,10,"mill"]]` in src/maps/demo.js); the hard-coded MILL hex is gone.
+- Painted buildings/bridge/ford/fort are skipped while CW.WORLD is on (random calls still made).
+- Brook reworked: runs on into the river bank, faded narrow spring, widens to the mouth, muted water, mud banks, gravel.
 
 ## Files touched
-src/world_edges.js (new), assets/art/edge_meshes.js (new, 15 KB), tools/build_tree_meshes.py (now bakes both files), src/render_art.js (skipEdges, ~8 lines), src/render3d.js (3 small edits), play.html, docs/WORLD_RECIPE.md, ASSET_CREDITS.md, STATUS.md, docs/WORLD_PLAN.md, docs/shots/world_t4_*.jpg
+src/world_structures.js (new), assets/art/struct_meshes.js (new, 327 KB), src/world_edges.js (instanced() helper, brook), src/render3d.js, src/render_art.js, src/maps/demo.js, play.html, tools/build_tree_meshes.py, docs, ASSET_CREDITS.md
 
 ## How to revert
-CW.WORLD = false at the top of src/render3d.js (everything painted again).
+CW.WORLD = false at the top of src/render3d.js, or git revert the T5 commit.
 
 ## Evidence
-docs/shots/world_t4_walls40.jpg and world_t4_walls62.jpg (wall follows the hex edges), world_t4_road.jpg (road continuous through Millbrook, painted buildings and label intact), world_t4_brook_fences.jpg. Headless Chromium on file://, no console errors or warnings. Software GL: check feel and speed on the Mac.
+docs/shots/world_t5_town.png, _farm.png, _bridge_mill.png, _brook_mouth.png. Done test: place() with mill at [6,10] gives (524,704), at [8,10] gives (646,722), with no entry gives none.
 
 ## Open questions for John / Grok
-1. Look: road is a dusty brown ribbon, brook a slate ribbon with mud banks, walls grey stones with mossy tops, fences brown rails. Want any of them lighter/darker or the wall higher?
-2. Not verified: the painted-style gate in vertical walls (10% before) is gone; walls are plain.
-3. The mill is still hidden until T5. Brooks still depend on CW.WATER from the painted pass (T6).
+1. Kenney Nature Kit has NO houses. Towns/farms/mill are tents, logs and plank rows (stand-ins). For real buildings add another CC0 Kenney kit (e.g. Fantasy Town Kit / Medieval Town Base) — needs John's OK.
+2. The mill is a hut on a stone platform, no water wheel.
+3. Brooks still read CW.WATER from the painted pass (T6).
 
 ## Suggested next brief (one line)
-T5 — Structures (Sonnet), when John says go.
+T6 — Water (Sonnet), when John says go.

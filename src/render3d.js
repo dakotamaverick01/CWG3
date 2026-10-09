@@ -282,7 +282,8 @@ CW.R3 = (function () {
     U.uGround.value = feat ? 1 : 0; try { buildObjects(feat ? S.trees || [] : []); } catch (e) { console.warn('3D trees skipped:', e.message); }
     if (CW.WORLD && CW.WorldTrees) { if (S.wt) { CW.WorldTrees.dispose(); S.wt = 0; } try { if (!S.occ || S.occ.image.width !== M.cols || S.occ.image.height !== M.rows) { S.occ = new THREE.DataTexture(new Uint8Array(M.cols * M.rows * 4), M.cols, M.rows, THREE.RGBAFormat); S.occ.needsUpdate = true; if (S.objs) S.objs.forEach(o => { if (o.material.uniforms.uOcc) o.material.uniforms.uOcc.value = S.occ; }); }
       S.wt = CW.WorldTrees.build({ scene, M, W3, occ: S.occ, U }); S.occKey = null; } catch (e) { console.warn('tree meshes skipped:', e.message); } }
-    if (CW.WORLD && CW.WorldEdges) { try { CW.WorldEdges.dispose(); S.we = CW.WorldEdges.build({ scene, M, W3, U }); } catch (e) { console.warn('3D edges skipped:', e.message); } }   // T4: roads, brooks, walls, fences from the map's edge data   // T2: mesh trees from hex letters if (S.feat && S.feat !== feat) { S.feat.width = S.feat.height = 0; } S.feat = feat;
+    if (CW.WORLD && CW.WorldEdges) { try { CW.WorldEdges.dispose(); S.we = CW.WorldEdges.build({ scene, M, W3, U }); } catch (e) { console.warn('3D edges skipped:', e.message); } }
+    if (CW.WORLD && CW.WorldStructures) { try { CW.WorldStructures.dispose(); CW.WorldStructures.build({ scene, M, W3 }); } catch (e) { console.warn('3D structures skipped:', e.message); } }   // T5: town, farm, bridge, ford, fort, knoll, mill from hex letters + map `structures`   // T4: roads, brooks, walls, fences from the map's edge data   // T2: mesh trees from hex letters if (S.feat && S.feat !== feat) { S.feat.width = S.feat.height = 0; } S.feat = feat;
     ttex.image = feat || img; ttex.needsUpdate = true; }
   // ---------- world pass 2: trees and the mill as objects standing on the mesh ----------
   // Upright camera-facing billboards from the props atlas, all trees in ONE instanced draw (plus one for their soft ground shadows).
@@ -309,12 +310,12 @@ CW.R3 = (function () {
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`;
-  const MILL = { hex: [6, 10], frame: 'bldg_mill', dx: .18, dy: .3, w: 1.2 };   // water mill on the west bank by Stone Bridge (John, 7 Oct); visual only
+  const MILL = { frame: 'bldg_mill', dx: .18, dy: .3, w: 1.2 };   // painted-look mill sprite (world off); WHERE it stands comes from the map file's `structures` list
   function buildObjects(trees) {
     if (S.objs) { S.objs.forEach(m => { scene.remove(m); }); S.objs[0].geometry.dispose(); S.objs[1].geometry.dispose(); S.objs = null; }
     const A = CW.ARTI, F = A && A.frames; if (!F || !A.props || !A.props.naturalWidth) return;
     const AW = A.props.naturalWidth, AH = A.props.naturalHeight, list = trees.slice();
-    if (!CW.WORLD && M.in(...MILL.hex) && F[MILL.frame]) { const [x, y] = CW.center(...MILL.hex); list.push([MILL.frame, x + MILL.dx * CW.R, y + MILL.dy * CW.R, MILL.w * CW.R, false, true]); }
+    if (!CW.WORLD && F[MILL.frame]) for (const [mc, mr, kind] of (M.structures || [])) if (kind === 'mill' && M.in(mc, mr)) { const [x, y] = CW.center(mc, mr); list.push([MILL.frame, x + MILL.dx * CW.R, y + MILL.dy * CW.R, MILL.w * CW.R, false, true]); }
     const n = list.length, base = new Float32Array(n * 3), uv = new Float32Array(n * 4), sz = new Float32Array(n * 4), hx = new Float32Array(n), rn = new Float32Array(n), rnd = CW.rng(23);
     list.forEach(([nm, x, y, w, flip, fixed], i) => { const f = F[nm]; if (!f) { sz[i * 4] = 0; return; } const [sx, sy, sw, sh, ax, ay] = f, b = W3(x, y);
       base.set([b.x, b.y - 1.5, b.z], i * 3); uv.set([sx / AW, sy / AH, sw / AW, sh / AH], i * 4);

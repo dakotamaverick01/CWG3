@@ -56,18 +56,18 @@ Every output is a pure function of the inputs above. "Today" is what the code do
 - **Today (T4 done):** with `CW.WORLD` on, `src/world_edges.js` builds them from the map data. Roads: one smooth ribbon per `M.roads` path, draped on the terrain heights (continuous, so no break at hex borders). Brooks: bank + water ribbon along `CW.WATER.streams` (the hex-edge chains; still produced by the painted pass, T6 removes that dependency). Fences: Kenney rail fence, 2 pieces per hex edge, pitched with the slope. Walls: 4 Kenney stones + 3 capstones per hex edge. The painted pass skips these four (`objs.skipEdges`) but still makes every random call, so other props do not move. Buildings, crops, bridge, ford, labels stay painted. **Built by:** T4.
 
 ### 2e. Structures
-- **From:** hex letter `t` (town), `h` (farm), `b` (bridge), `x` (fort), plus a placement table (to be added in T5 at the bottom of this file).
-- **Output:** Kenney-kit buildings, bridge, earthworks. The mill is a *table row* (a hex type or edge-of-water rule), never a coordinate.
-- **Today:** buildings are painted; the mill is a hard-coded Millbrook hex (`MILL` in `render3d.js`). With `CW.WORLD` on the mill is skipped. **Built by:** T5.
+- **From:** hex letters `t`, `h`, `b`, `d`, `x`, `k` plus the map file's optional `structures:[[c,r,'mill']]` list (table at the bottom of this file).
+- **Output:** instanced Kenney Nature Kit pieces (`src/world_structures.js`, meshes in `assets/art/struct_meshes.js`). The kit has no houses, so towns, farms and the mill are stand-ins built from tents, logs, plank rows and a stone platform.
+- **Today (T5 done):** with `CW.WORLD` on the painted buildings, bridge, ford and fort outline are skipped (the painted pass still makes every random call, so other props stay put). Moving the `'mill'` entry in the map file moves the mill; deleting it removes it. **Built by:** T5.
 
 ## 3. Known Millbrook-only paths (must be gone by the end of the plan)
 
 | Where | What | Removed by |
 |---|---|---|
-| `render3d.js` `MILL` | mill at hex [6,10] | T5 |
+| `render3d.js` `MILL` | mill at hex [6,10] | T5 (done: the hex now lives in the map file's `structures` list) |
 | `render3d.js` `S.trees` from painted pass | tree positions from painted coordinates | T2 |
 | `CW.WATER` from `render_art.js` | river/stream polylines recorded while painting | T6 |
-| props layer: buildings, bridge, ford, fort, well, haystacks | painted per map by `CW.paintArtFeatures` (walls, fences, roads, brooks now 3D: T4 done) | T5 |
+| props layer: buildings, bridge, ford, fort, well, haystacks | painted per map by `CW.paintArtFeatures`; roads/brooks/walls/fences 3D (T4), buildings/bridge/ford/fort 3D (T5, painted copies skipped while `CW.WORLD` is on). Crops and labels still painted | T5 done |
 
 ## 4. The `CW.WORLD` flag (T1 spike)
 
@@ -82,3 +82,17 @@ Every output is a pure function of the inputs above. "Today" is what the code do
 2. `play.html` works by double-click (`file://`): new art is base64-embedded.
 3. Assets are CC0 only and logged in `ASSET_CREDITS.md`.
 4. Living off freezes motion and never changes the layout.
+
+## 6. Structure placement table (T5)
+
+| Trigger | Pieces (Kenney Nature Kit, CC0) | Rule |
+|---|---|---|
+| hex `t` town | 3 tents (middle one open), campfire ring, 2 log piles, signpost | seeded per hex; tents on a ring round the centre |
+| hex `h` farm | small tent as barn, 2 ploughed double rows, big log pile, stump | seeded per hex |
+| hex `b` bridge | wooden bridge, 1.9 hex long | runs along the road through the hex; else across the river (perpendicular to water neighbours); else east-west |
+| hex `d` ford | river-rocks stepping stones | same direction rule as the bridge |
+| hex `x` fort | ring of 12 x 2 courses of logs (earthwork), 2 tents, signpost | seeded per hex |
+| hex `k` knoll | 3 large rocks | seeded per hex |
+| map field `structures:[[c,r,'mill']]` | stone platform, canvas-roofed hut, big log pile, rock | stands on the side of the hex that faces its water neighbours; hex comes only from the map file |
+
+Brooks (T4, reworked in T5): the end nearer the river is run on into the river bank so a brook never stops in open grass; the other end is a narrow faded spring. Width grows from spring to mouth and the banks carry scattered gravel (Kenney flat stone).

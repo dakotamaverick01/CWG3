@@ -428,3 +428,9 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - The painted pass skips just those four (render_art.js skipEdges; random calls kept so other props stay put). Painted layer is back for buildings, crops, bridge, ford, fort, labels (T1 had hidden all of it); painted-coordinate trees stay out (T2 meshes). The hard-coded Millbrook mill stays off until T5.
 - Revert: CW.WORLD = false (top of render3d.js) = old painted roads/walls/fences/brooks. Shots: docs/shots/world_t4_*.jpg.
 - Dependency left for T6: brooks use CW.WATER.streams, still produced by the painted pass.
+
+## 2026-10-09 — WORLD T5 (structures), on main
+- New src/world_structures.js builds town/farm/bridge/ford/fort/knoll/mill from hex letters + map `structures` list (table: docs/WORLD_RECIPE.md section 6). Meshes: assets/art/struct_meshes.js (Kenney, CC0).
+- Painted buildings/bridge/ford/fort skipped while CW.WORLD is on. Kit has no houses: stand-ins (tents, logs, rows).
+- Brook (John's feedback): joins the river, faded spring, wider mouth, gravel banks.
+- Next: T6 water, when John says go.

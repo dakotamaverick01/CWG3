@@ -21,6 +21,25 @@ EDGE_MESHES = {  # fence + stones (walls are rows of stones along a hex edge); n
     'stoneA': ('stone_largeA',     {'dirt': (118, 110, 98), 'grass': (88, 100, 62)}),
     'stoneB': ('stone_smallFlatA', {'dirt': (124, 116, 104), 'grass': (92, 104, 66)}),
 }
+STRUCT_H = {  # WORLD T5 structures, normalised to height 1 (the game scales them to pixels); canvas = our own off-white, not the kit's red
+    'tent':      ('tent_detailedClosed', {'colorRed': (176, 164, 136), 'colorRedDark': (126, 116, 94), 'wood': (96, 70, 46)}),
+    'tentOpen':  ('tent_detailedOpen',   {'colorRed': (170, 158, 130), 'wood': (96, 70, 46)}),
+    'tentSmall': ('tent_smallClosed',    {'colorRed': (164, 152, 126), 'colorRedDark': (118, 108, 88), 'wood': (96, 70, 46), '_defaultMat': (96, 70, 46)}),
+    'logs':      ('log_stack',           {'woodBark': (92, 66, 42), 'woodInner': (170, 136, 92)}),
+    'logsBig':   ('log_stackLarge',      {'woodBark': (92, 66, 42), 'woodInner': (170, 136, 92), 'woodDark': (70, 50, 34)}),
+    'log':       ('log_large',           {'woodBark': (92, 66, 42), 'woodInner': (170, 136, 92)}),
+    'fire':      ('campfire_stones',     {'stone': (112, 106, 98)}),
+    'sign':      ('sign',                {'wood': (126, 92, 56), 'woodDark': (86, 62, 40), '_defaultMat': (86, 62, 40)}),
+    'rows':      ('crops_dirtDoubleRow', {'dirtDark': (84, 62, 40), 'dirt': (108, 82, 54)}),
+    'stump':     ('stump_roundDetailed', {'woodBark': (92, 66, 42), 'woodInner': (170, 136, 92)}),
+    'platform':  ('platform_stone',      {'stoneDark': (96, 90, 82), 'stone': (124, 118, 106)}),
+    'rockA':     ('rock_largeA',         {'dirt': (116, 108, 96), 'grass': (86, 98, 60)}),
+    'rockC':     ('rock_largeC',         {'dirt': (112, 104, 92), 'grass': (86, 98, 60)}),
+}
+STRUCT_L = {  # normalised so the x-extent = 1 (length)
+    'bridge': ('bridge_wood',      {'woodBark': (88, 64, 42), 'wood': (140, 104, 64), 'stone': (112, 106, 98)}),
+    'stepRocks': ('ground_riverRocks', {'dirtDark': (70, 54, 36), 'grass': (86, 98, 60), 'dirt': (108, 88, 60), 'stone': (124, 118, 106), 'water': (70, 100, 108)}),
+}
 DEFAULT_COL = (112, 106, 96)
 
 def srgb_to_lin(c):
@@ -102,6 +121,8 @@ def write(out, name, var):
 def main(folder):
     write(bake(folder, MESHES, 'height'), 'tree_meshes.js', 'CW.TREEMESH')
     write(bake(folder, EDGE_MESHES, 'length'), 'edge_meshes.js', 'CW.EDGEMESH')
+    st = bake(folder, STRUCT_H, 'height'); st.update(bake(folder, STRUCT_L, 'length'))
+    write(st, 'struct_meshes.js', 'CW.STRUCTMESH')
 
 if __name__ == '__main__':
     main(sys.argv[1])

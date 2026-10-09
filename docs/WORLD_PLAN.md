@@ -50,3 +50,4 @@ John's work usage comes first. Next session is T3 only.
 
 - T3 — done test passed 2026-10-09 (woods floor rocky_2 instead of rocky_3; wheat and corn unchanged). On main.
 - T4 — done test passed 2026-10-09 (wall follows a hex edge at 40 and 62 degrees; road is one continuous ribbon). On main.
+- T5 — done test passed 2026-10-09 (mill follows the `structures` entry in the map file; removing it removes the mill). Brook now joins the river. On main.

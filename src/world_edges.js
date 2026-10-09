@@ -27,12 +27,15 @@ CW.WorldEdges = (function () {
     out.push(pts[pts.length - 1]); return out;
   }
 
+  // nearest point on a polyline to p: [x, y, distance]
+  function nearOn(poly, p) { let best = [0, 0, 1e9]; for (let i = 0; i < poly.length - 1; i++) { const a = poly[i], b = poly[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1,
+      t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2)), x = a[0] + dx * t, y = a[1] + dy * t, d = Math.hypot(p[0] - x, p[1] - y); if (d < best[2]) best = [x, y, d]; } return best; }
   // ---------- ribbons (roads, brooks) ----------
   // cross = [[offset px, [r,g,b,a]], ...] from one side to the other; returns a Mesh draped on the terrain
-  function ribbon(line, cross, W3, lift, mat) {
+  function ribbon(line, cross, W3, lift, mat, wf, af) {   // wf[i] widens/narrows the cross-section at point i, af[i] fades its alpha (both optional)
     const n = line.length, m = cross.length, pos = new Float32Array(n * m * 3), cl = new Float32Array(n * m * 4), idx = [];
     for (let i = 0; i < n; i++) { const a = line[Math.max(0, i - 1)], b = line[Math.min(n - 1, i + 1)], tx = b[0] - a[0], ty = b[1] - a[1], L = Math.hypot(tx, ty) || 1, nx = -ty / L, ny = tx / L;
-      for (let j = 0; j < m; j++) { const v = W3(line[i][0] + nx * cross[j][0], line[i][1] + ny * cross[j][0]), o = i * m + j; pos.set([v.x, v.y + lift, v.z], o * 3); cl.set(cross[j][1], o * 4);
+      for (let j = 0; j < m; j++) { const w = wf ? wf[i] : 1, v = W3(line[i][0] + nx * cross[j][0] * w, line[i][1] + ny * cross[j][0] * w), o = i * m + j; pos.set([v.x, v.y + lift, v.z], o * 3); cl.set(cross[j][1], o * 4); if (af) cl[o * 4 + 3] *= af[i];
         if (i < n - 1 && j < m - 1) { const q = o, r = o + 1, s = o + m, t = o + m + 1; idx.push(q, s, r, r, s, t); } } }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aCol', new THREE.BufferAttribute(cl, 4)); g.setIndex(idx);
     const me = new THREE.Mesh(g, mat); me.frustumCulled = false; me.renderOrder = 1; return me;
@@ -78,6 +81,21 @@ CW.WorldEdges = (function () {
     return out;
   }
 
+  // one instanced mesh per kind. items: [{kind, x, y (map px), lift, yaw, pitch, rnd, sx, sy, sz}]; MESH = baked meshes (edge_meshes.js / struct_meshes.js); also used by world_structures.js
+  function instanced(scene, list, EM, kinds, fog) {
+    const out = [];
+    for (const kind of kinds) { const items = list.filter(t => t.kind === kind), n = items.length; if (!n) continue; const m = EM[kind], W3 = list.W3;
+      const base = new Float32Array(n * 3), rot = new Float32Array(n * 3), sc = new Float32Array(n * 3);
+      items.forEach((t, i) => { const b = W3(t.x, t.y); base.set([b.x, b.y + t.lift, b.z], i * 3); rot.set([t.yaw, t.pitch, t.rnd], i * 3); sc.set([t.sx, t.sy, t.sz], i * 3); });
+      const g = new THREE.InstancedBufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(dec(m.p, Float32Array), 3)); g.setAttribute('normal', new THREE.BufferAttribute(dec(m.nm, Float32Array), 3));
+      g.setAttribute('color', new THREE.BufferAttribute(dec(m.c, Uint8Array), 3, true)); g.setIndex(new THREE.BufferAttribute(dec(m.i, Uint16Array), 1));
+      g.setAttribute('aBase', new THREE.InstancedBufferAttribute(base, 3)); g.setAttribute('aRot', new THREE.InstancedBufferAttribute(rot, 3)); g.setAttribute('aSc', new THREE.InstancedBufferAttribute(sc, 3)); g.instanceCount = n;
+      const me = new THREE.Mesh(g, new THREE.ShaderMaterial({ vertexShader: IVS, fragmentShader: IFS, uniforms: { ...fog }, side: THREE.DoubleSide })); me.frustumCulled = false; me.renderOrder = 0;
+      scene.add(me); out.push(me); }
+    return out;
+  }
+
   // env: { scene, M, W3 (map px -> world), U (unused today) }
   function build(env) {
     const { scene, M, W3 } = env, EM = CW.EDGEMESH; if (!EM) throw new Error('edge_meshes.js missing');
@@ -90,24 +108,27 @@ CW.WorldEdges = (function () {
     for (const rd of M.roads) { const hw = rd.major ? 6.5 : 5, line = smooth(rd.p.map(p => CW.center(...p)), 4);
       const cross = [[-hw * 1.4, col(70, 52, 30, 0)], [-hw * 1.08, col(86, 64, 38, .5)], [-hw * .72, col(136, 108, 70, 1)], [0, col(158, 130, 88, 1)], [hw * .72, col(136, 108, 70, 1)], [hw * 1.08, col(86, 64, 38, .5)], [hw * 1.4, col(70, 52, 30, 0)]];
       const me = ribbon(line, cross, W3, 1.3, roadMat); scene.add(me); parts.push(me); stats.roads++; }
-    // brooks (hex-edge chains already meandered by the data pass)
-    const brookMat = rmat([.9, .9, .9], -5);
-    for (const pts of ((CW.WATER && CW.WATER.streams) || [])) { if (pts.length < 2) continue; const line = smooth(pts, 4);
-      const cross = [[-5.2, col(60, 44, 22, 0)], [-3.9, col(62, 46, 24, .55)], [-2.4, col(48, 88, 102, .95)], [0, col(78, 126, 136, 1)], [2.4, col(48, 88, 102, .95)], [3.9, col(62, 46, 24, .55)], [5.2, col(60, 44, 22, 0)]];
-      const me = ribbon(line, cross, W3, 1.5, brookMat); me.renderOrder = 2; scene.add(me); parts.push(me); stats.brooks++; }
+    // brooks (hex-edge chains already meandered by the data pass). Each brook runs from a faded spring to a mouth that is carried on to the river bank, widening as it goes
+    const brookMat = rmat([.86, .86, .82], -5), river = (CW.WATER && CW.WATER.river) || null, rhw = ((CW.WATER && CW.WATER.rw) || 36) * .5, pebbles = [], pr = CW.rng(4242);
+    for (let pts of ((CW.WATER && CW.WATER.streams) || [])) { if (pts.length < 2) continue;
+      if (river && river.length > 1) {   // the end nearer the river is the mouth: join it to the river bank so it never stops short in open grass
+        const d0 = nearOn(river, pts[0]), d1 = nearOn(river, pts[pts.length - 1]); if (d0[2] < d1[2]) pts = pts.slice().reverse();
+        const e = nearOn(river, pts[pts.length - 1]), last = pts[pts.length - 1];
+        if (e[2] > 2 && e[2] < CW.R * 3) { const k = Math.max(2, Math.ceil(e[2] / 12)), dx = e[0] - last[0], dy = e[1] - last[1], L = Math.hypot(dx, dy), stop = Math.max(0, e[2] - rhw * .15) / e[2];   // run 85% of the way into the water so the ends overlap
+          for (let i = 1; i <= k; i++) pts = pts.concat([[last[0] + dx * stop * i / k + (dy / L) * Math.sin(i * 1.7) * 2, last[1] + dy * stop * i / k - (dx / L) * Math.sin(i * 1.7) * 2]]); } }
+      const line = smooth(pts, 4), n = line.length, wf = new Float32Array(n), af = new Float32Array(n); let run = 0;
+      for (let i = 0; i < n; i++) { if (i) run += Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]); }
+      let acc = 0; for (let i = 0; i < n; i++) { if (i) acc += Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]); const u = acc / (run || 1);
+        wf[i] = .8 + 1.0 * u * u; af[i] = Math.min(1, acc / 70);   // narrow + faded at the spring, wide at the mouth
+        if (i % 3 === 1 && i < n - 1) { const a = line[i - 1], b = line[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L, sd = (i % 2 ? 1 : -1) * (6.4 * wf[i] + pr() * 1.5), sz = 2.2 + pr() * 2.2;   // gravel along the banks
+          pebbles.push({ kind: 'stoneB', x: line[i][0] + nx * sd, y: line[i][1] + ny * sd, lift: .4, yaw: pr() * 6.283, pitch: 0, rnd: pr(), sx: sz * 1.4, sy: sz * 4, sz: sz * 1.2 }); } }
+      const cross = [[-9, col(70, 56, 34, 0)], [-6.6, col(74, 58, 36, .5)], [-4.4, col(92, 76, 52, .85)], [-2.6, col(52, 82, 88, 1)], [0, col(62, 98, 104, 1)], [2.6, col(52, 82, 88, 1)], [4.4, col(92, 76, 52, .85)], [6.6, col(74, 58, 36, .5)], [9, col(70, 56, 34, 0)]];
+      const me = ribbon(line, cross, W3, 1.5, brookMat, wf, af); me.renderOrder = 2; scene.add(me); parts.push(me); stats.brooks++; }
     // fences and walls: one instanced mesh per kind
-    const list = pieces(M, W3);
-    for (const kind of ['fence', 'stoneA', 'stoneB']) { const items = list.filter(t => t.kind === kind), n = items.length; if (!n) continue; const m = EM[kind];
-      const base = new Float32Array(n * 3), rot = new Float32Array(n * 3), sc = new Float32Array(n * 3);
-      items.forEach((t, i) => { const b = W3(t.x, t.y); base.set([b.x, b.y + t.lift, b.z], i * 3); rot.set([t.yaw, t.pitch, t.rnd], i * 3); sc.set([t.sx, t.sy, t.sz], i * 3); });
-      const g = new THREE.InstancedBufferGeometry();
-      g.setAttribute('position', new THREE.BufferAttribute(dec(m.p, Float32Array), 3)); g.setAttribute('normal', new THREE.BufferAttribute(dec(m.nm, Float32Array), 3));
-      g.setAttribute('color', new THREE.BufferAttribute(dec(m.c, Uint8Array), 3, true)); g.setIndex(new THREE.BufferAttribute(dec(m.i, Uint16Array), 1));
-      g.setAttribute('aBase', new THREE.InstancedBufferAttribute(base, 3)); g.setAttribute('aRot', new THREE.InstancedBufferAttribute(rot, 3)); g.setAttribute('aSc', new THREE.InstancedBufferAttribute(sc, 3)); g.instanceCount = n;
-      const me = new THREE.Mesh(g, new THREE.ShaderMaterial({ vertexShader: IVS, fragmentShader: IFS, uniforms: { ...fog }, side: THREE.DoubleSide })); me.frustumCulled = false; me.renderOrder = 0;
-      scene.add(me); parts.push(me); stats.pieces += n; }
+    const list = pieces(M, W3).concat(pebbles); list.W3 = W3;
+    const inst = instanced(scene, list, EM, ['fence', 'stoneA', 'stoneB'], fog); inst.forEach(m => parts.push(m)); stats.pieces += list.length;
     state = { scene, parts }; return stats;
   }
   function dispose() { if (!state) return; state.parts.forEach(m => { state.scene.remove(m); m.geometry.dispose(); m.material.dispose(); }); state = null; }
-  return { build, dispose, edgesOf, smooth };
+  return { build, dispose, edgesOf, smooth, instanced };
 })();

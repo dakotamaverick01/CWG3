@@ -216,22 +216,23 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet, objs) {   // objs (3D vi
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,215,130,.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x - s * .15, y - s * .45, s * .6, 3.4, 4.6); ctx.stroke(); }));
   }
-  // hex features with props
+  // hex features with props (WORLD T5: with the 3D world on, buildings/bridge/ford/fort are 3D pieces from world_structures.js; the painted ones still make every rand() call so other props stay put)
+  const PB = skip ? () => {} : P;
   const town = ['bldg_church', 'bldg_store', 'bldg_tavern', 'bldg_brick_house', 'bldg_school', 'bldg_frame_house_b', 'bldg_smithy', 'bldg_brick_house_b', 'bldg_store_b', 'bldg_tavern_b'];
   let ti = 0;
   M.all.forEach(([c, r]) => { const t = M.ter(c, r), [x, y] = CW.center(c, r);
     if (t === 't') { const spots = [[-.42, -.3], [.38, -.22], [-.1, .38]]; spots.forEach(([dx, dy], k) => { const nm = town[(ti++) % town.length], px = x + dx * R, py = y + dy * R + R * .25;
-      put(py, () => P(ctx, nm, px, py, R * (nm.includes('church') ? .9 : 1.0), (c + k) % 2 === 1)); }); put(y + R * .6, () => P(ctx, 'clut_well', x + R * .45, y + R * .55, R * .22)); }
-    if (t === 'h') { put(y + R * .05, () => P(ctx, 'bldg_frame_house', x - R * .2, y + R * .05, R * .9)); put(y - R * .25, () => P(ctx, 'bldg_smithy_b', x + R * .45, y - R * .25, R * .7, true));
-      put(y + R * .55, () => P(ctx, 'clut_haystack', x + R * .45, y + R * .55, R * .4)); put(y + R * .6, () => P(ctx, 'clut_woodpile', x - R * .55, y + R * .6, R * .3)); }
-    if (t === 'k') for (let i = 0; i < 3; i++) { const px = x + (rand() - .5) * R * 1.1, py = y + (rand() - .5) * R * .9; put(py, () => P(ctx, 'clut_boulder', px, py, R * (.22 + rand() * .15), rand() < .5)); }
-    if (t === 'b') put(y + R * .3, () => P(ctx, 'ruin_arch_bridge_b', x, y + R * .3, R * 1.5));
-    if (t === 'd' && CW.ARTI.frames.wx_ford_stones) { ctx.save(); CW.hexPath(ctx, x, y, R * .7); ctx.clip(); ctx.fillStyle = pat('water_3', 0, 0, 0, .3); ctx.globalAlpha = .8; ctx.fillRect(x - R, y - R, R * 2, R * 2); ctx.restore();   // batch 2 ford
-      put(y + R * .15, () => P(ctx, 'wx_ford_stones', x, y + R * .15, R * 1.25, rand() < .5)); }
-    else if (t === 'd') { ctx.fillStyle = 'rgba(225,210,170,.85)'; for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.ellipse(x + i * 6, y + (i % 2) * 2, 2.6, 1.8, 0, 0, 7); ctx.fill(); } }
-    if (t === 'x') { ctx.save(); ctx.translate(x, y); ctx.beginPath(); for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5, rr = i % 2 ? R * .42 : R * .7; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath();
+      put(py, () => PB(ctx, nm, px, py, R * (nm.includes('church') ? .9 : 1.0), (c + k) % 2 === 1)); }); put(y + R * .6, () => PB(ctx, 'clut_well', x + R * .45, y + R * .55, R * .22)); }
+    if (t === 'h') { put(y + R * .05, () => PB(ctx, 'bldg_frame_house', x - R * .2, y + R * .05, R * .9)); put(y - R * .25, () => PB(ctx, 'bldg_smithy_b', x + R * .45, y - R * .25, R * .7, true));
+      put(y + R * .55, () => PB(ctx, 'clut_haystack', x + R * .45, y + R * .55, R * .4)); put(y + R * .6, () => PB(ctx, 'clut_woodpile', x - R * .55, y + R * .6, R * .3)); }
+    if (t === 'k') for (let i = 0; i < 3; i++) { const px = x + (rand() - .5) * R * 1.1, py = y + (rand() - .5) * R * .9; put(py, () => PB(ctx, 'clut_boulder', px, py, R * (.22 + rand() * .15), rand() < .5)); }
+    if (t === 'b') put(y + R * .3, () => PB(ctx, 'ruin_arch_bridge_b', x, y + R * .3, R * 1.5));
+    if (t === 'd' && CW.ARTI.frames.wx_ford_stones) { if (!skip) { ctx.save(); CW.hexPath(ctx, x, y, R * .7); ctx.clip(); ctx.fillStyle = pat('water_3', 0, 0, 0, .3); ctx.globalAlpha = .8; ctx.fillRect(x - R, y - R, R * 2, R * 2); ctx.restore(); }   // batch 2 ford
+      put(y + R * .15, () => PB(ctx, 'wx_ford_stones', x, y + R * .15, R * 1.25, rand() < .5)); }
+    else if (t === 'd' && !skip) { ctx.fillStyle = 'rgba(225,210,170,.85)'; for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.ellipse(x + i * 6, y + (i % 2) * 2, 2.6, 1.8, 0, 0, 7); ctx.fill(); } }
+    if (t === 'x' && !skip) { ctx.save(); ctx.translate(x, y); ctx.beginPath(); for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5, rr = i % 2 ? R * .42 : R * .7; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath();
       ctx.strokeStyle = 'rgba(40,28,14,.55)'; ctx.lineWidth = 9; ctx.stroke(); ctx.strokeStyle = pat('mud_2', 0, 0, 0, .3); ctx.lineWidth = 6; ctx.stroke(); ctx.strokeStyle = 'rgba(255,220,160,.3)'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
-    if (t === 'g' && rand() < .05) { const px = x + (rand() - .5) * R, py = y + (rand() - .5) * R; put(py, () => P(ctx, rand() < .5 ? 'clut_stump' : 'clut_boulder', px, py, R * .2)); } });
+    if (t === 'g' && rand() < .05) { const px = x + (rand() - .5) * R, py = y + (rand() - .5) * R; put(py, () => PB(ctx, rand() < .5 ? 'clut_stump' : 'clut_boulder', px, py, R * .2)); } });
   // walls & fences on hex edges: 3/4-view sprites fitted to each edge
   M.edgeAt.forEach((types, k) => { const [c, r, d] = k.split(',').map(Number), [x, y] = CW.center(c, r), p = CW.corner(x, y, d), q = CW.corner(x, y, d + 1);
     for (const t of types) { if (t !== 'wall' && t !== 'fence') continue;
