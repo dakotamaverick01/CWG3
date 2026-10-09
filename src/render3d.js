@@ -275,13 +275,14 @@ CW.R3 = (function () {
   function buildFeatures() {
     if (!CW.paintArtFeatures || !CW.ARTI) return null; const c = document.createElement('canvas'); c.width = MW; c.height = MH; const x = c.getContext('2d'), wet = M.weather === 'mud' || M.weather === 'rain';
     const pat = (name, rot = 0, ox = 0, oy = 0, s = .42) => { const p = x.createPattern(CW.ARTI.ground[name], 'repeat'); p.setTransform(new DOMMatrix().translate(ox, oy).rotate(rot).scale(s)); return p; };
-    const objs = { trees: [] }; CW.paintArtFeatures(x, M, CW.rng(11), pat, wet, objs); S.trees = objs.trees; return c; }
+    const objs = { trees: [], skipEdges: !!CW.WORLD }; CW.paintArtFeatures(x, M, CW.rng(11), pat, wet, objs); S.trees = objs.trees; return c; }
   function buildGround(img) {
     let feat = null; try { if (buildGroundTex()) { buildGroundWeights(); feat = buildFeatures(); } } catch (e) { console.warn('tiled ground skipped, painted map in use:', e.message); feat = null; }
-    if (feat && CW.WORLD) { feat.getContext('2d').clearRect(0, 0, feat.width, feat.height); S.trees = []; }   // T1: paint layer hidden, ground = hex letters only
+    if (feat && CW.WORLD) S.trees = [];   // T4: painted layer is back (buildings, crops, bridge, labels) minus roads/brooks/walls/fences (skipEdges); painted-coordinate trees stay out (T2 meshes)
     U.uGround.value = feat ? 1 : 0; try { buildObjects(feat ? S.trees || [] : []); } catch (e) { console.warn('3D trees skipped:', e.message); }
     if (CW.WORLD && CW.WorldTrees) { if (S.wt) { CW.WorldTrees.dispose(); S.wt = 0; } try { if (!S.occ || S.occ.image.width !== M.cols || S.occ.image.height !== M.rows) { S.occ = new THREE.DataTexture(new Uint8Array(M.cols * M.rows * 4), M.cols, M.rows, THREE.RGBAFormat); S.occ.needsUpdate = true; if (S.objs) S.objs.forEach(o => { if (o.material.uniforms.uOcc) o.material.uniforms.uOcc.value = S.occ; }); }
-      S.wt = CW.WorldTrees.build({ scene, M, W3, occ: S.occ, U }); S.occKey = null; } catch (e) { console.warn('tree meshes skipped:', e.message); } }   // T2: mesh trees from hex letters if (S.feat && S.feat !== feat) { S.feat.width = S.feat.height = 0; } S.feat = feat;
+      S.wt = CW.WorldTrees.build({ scene, M, W3, occ: S.occ, U }); S.occKey = null; } catch (e) { console.warn('tree meshes skipped:', e.message); } }
+    if (CW.WORLD && CW.WorldEdges) { try { CW.WorldEdges.dispose(); S.we = CW.WorldEdges.build({ scene, M, W3, U }); } catch (e) { console.warn('3D edges skipped:', e.message); } }   // T4: roads, brooks, walls, fences from the map's edge data   // T2: mesh trees from hex letters if (S.feat && S.feat !== feat) { S.feat.width = S.feat.height = 0; } S.feat = feat;
     ttex.image = feat || img; ttex.needsUpdate = true; }
   // ---------- world pass 2: trees and the mill as objects standing on the mesh ----------
   // Upright camera-facing billboards from the props atlas, all trees in ONE instanced draw (plus one for their soft ground shadows).

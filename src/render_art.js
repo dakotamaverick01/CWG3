@@ -126,6 +126,9 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet, objs) {   // objs (3D vi
   CW.WATER = { river: null, rw: 0, streams: [] };   // session 17a: water paths recorded for the 3D flow mask (data only)
   const R = CW.R, P = CW.prop, each = (t, fn) => M.all.forEach(([c, r]) => { if (M.ter(c, r) === t) fn(...CW.center(c, r), c, r); }), sprites = [];
   const put = (y, fn) => sprites.push([y, fn]); // upright objects, drawn back-to-front after the flat stuff
+  // WORLD T4 (3D view, CW.WORLD): roads, brooks, walls and fences are built as 3D pieces from the map data (src/world_edges.js) and are NOT painted here.
+  // Drawing is skipped but every rand() call still happens, so all other props land exactly where they did before.
+  const skip = !!(objs && objs.skipEdges), PW = skip ? (c, nm, ...a) => (/^(fsw_|wall_|fence_)/.test(nm) ? 0 : CW.prop(c, nm, ...a)) : CW.prop, PS = skip ? () => 0 : CW.prop;
   // crop rows: painted wheat strokes
   const realCrops = !!(CW.ARTI && CW.ARTI.ground.wheat_0 && CW.ARTI.ground.corn_0), K = CW.cropKind(M);
   if (realCrops) each('c', (x, y, c, r) => { if (K.get(c + ',' + r) !== 'corn' && rand() < .3) put(y + R * .3, () => P(ctx, rand() < .6 ? 'clut_sheaves' : 'clut_haystack', x + (rand() - .5) * R, y + R * .3, R * .45)); });
@@ -149,7 +152,7 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet, objs) {   // objs (3D vi
     ctx.strokeStyle = 'rgba(70,120,130,.8)'; ctx.lineWidth = rw * .6; ctx.stroke();
     ctx.setLineDash([6, 22, 2, 30]); ctx.strokeStyle = 'rgba(222,230,228,.28)'; ctx.lineWidth = 1.4; ctx.stroke(); ctx.setLineDash([]); }
   // roads: packed-earth texture with ruts
-  for (const rd of M.roads) { const pts = rd.p.map(p => CW.center(...p)), w = rd.major ? 11 : 8; CW.smoothPath(ctx, pts); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (!skip) for (const rd of M.roads) { const pts = rd.p.map(p => CW.center(...p)), w = rd.major ? 11 : 8; CW.smoothPath(ctx, pts); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.strokeStyle = 'rgba(60,42,20,.45)'; ctx.lineWidth = w + 4; ctx.stroke();
     const G = CW.ARTI.ground, rt = G.road_0 ? (wet ? 'road_2' : rd.major ? 'road_1' : 'road_0') : (wet ? 'mud_1' : 'farmyard_0');   // batch 2 road surfaces
     ctx.strokeStyle = pat(rt, 0, 0, 0, .25); ctx.lineWidth = w; ctx.stroke();
@@ -171,9 +174,9 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet, objs) {   // objs (3D vi
       mp.push(pts[pts.length - 1]); pts = mp; CW.WATER.streams.push(pts); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       const WG = CW.ARTI.ground.water_0 ? [[pat('water_2', 0, 0, 0, .2), 9], ['rgba(40,30,15,.3)', 6], [pat('water_0', 0, 0, 0, .2), 4.4], ['rgba(53,96,111,.55)', 3], ['rgba(140,185,190,.45)', 1.3], ['rgba(255,214,150,.3)', .8]]   // batch 2: mud bank + pebbly water
         : [['rgba(60,45,20,.45)', 8], ['#35606f', 4.2], ['rgba(110,160,165,.7)', 2], ['rgba(255,214,150,.35)', .8]];
-      for (const [col, w] of WG) { CW.smoothPath(ctx, pts); ctx.strokeStyle = col; ctx.lineWidth = w; ctx.stroke(); }
+      if (!skip) for (const [col, w] of WG) { CW.smoothPath(ctx, pts); ctx.strokeStyle = col; ctx.lineWidth = w; ctx.stroke(); }
       if (CW.ARTI.frames.wx_reeds) pts.forEach(([px, py], k) => { if (k % 2 || rand() > .22) return; const side = rand() < .5 ? -1 : 1, qx = px + side * 5, qy = py + 3;   // reeds & cattails on the banks
-        put(qy, () => P(ctx, rand() < .6 ? 'wx_reeds' : 'wx_cattails', qx, qy, R * .16, rand() < .5)); }); } }
+        put(qy, () => PS(ctx, rand() < .6 ? 'wx_reeds' : 'wx_cattails', qx, qy, R * .16, rand() < .5)); }); } }
   // batch 2: painted trees (Grok sheets 11-12) — woodland clumps fill forest hexes, single trees on the edges, orchards in rows
   const TF = CW.ARTI && CW.ARTI.frames;
   if (TF && TF.wood_clump_a && TF.tree_oak) {
@@ -236,14 +239,14 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet, objs) {   // objs (3D vi
       const F = CW.ARTI.frames;
       if (t === 'wall' && F.fsw_vert && F.fsw_diag) {                                        // batch 2: fieldstone cut to the edge angle
         if (vert) { const nm = rand() < .1 ? 'fsw_vert_gate' : 'fsw_vert', f = F[nm], h = Math.abs(q[1] - p[1]) * 1.18;
-          put(Math.max(p[1], q[1]), () => P(ctx, nm, p[0], Math.max(p[1], q[1]) + 3, h * f[2] / f[3])); }
+          put(Math.max(p[1], q[1]), () => PW(ctx, nm, p[0], Math.max(p[1], q[1]) + 3, h * f[2] / f[3])); }
         else { const nm = ['fsw_diag', 'fsw_diag', 'fsw_diag_mossy', 'fsw_diag_broken'][rand() * 4 | 0], my = Math.max(p[1], q[1]), mx = (p[0] + q[0]) / 2;
-          put(my, () => P(ctx, nm, mx, my + 3, Math.abs(q[0] - p[0]) * 1.2, slashUp)); }
+          put(my, () => PW(ctx, nm, mx, my + 3, Math.abs(q[0] - p[0]) * 1.2, slashUp)); }
         continue; }
       if (vert) { const n = 3; for (let i = 0; i < n; i++) { const f = (i + .9) / n, px = p[0] + (q[0] - p[0]) * f, py = p[1] + (q[1] - p[1]) * f;
-          put(py, () => P(ctx, t === 'wall' ? 'wall_short' : 'fence_worm_short', px, py, R * .36, rand() < .5)); } }
+          put(py, () => PW(ctx, t === 'wall' ? 'wall_short' : 'fence_worm_short', px, py, R * .36, rand() < .5)); } }
       else { const my = Math.max(p[1], q[1]), mx = (p[0] + q[0]) / 2, nm = t === 'wall' ? (rand() < .25 ? 'wall_mossy' : 'wall_long') : (rand() < .5 ? 'fence_worm_a' : 'fence_worm_b');
-        put(my, () => P(ctx, nm, mx, my + 2, Math.abs(q[0] - p[0]) * 1.12, !slashUp)); } } });
+        put(my, () => PW(ctx, nm, mx, my + 2, Math.abs(q[0] - p[0]) * 1.12, !slashUp)); } } });
   // supply wagons
   M.supply.forEach(([c, r, s]) => { const [x, y] = CW.center(c, r); put(y + R * .5, () => { P(ctx, 'clut_wagon', x, y + R * .5, R * .6); ctx.fillStyle = s === 'US' ? '#2d4f8f' : '#8f2d2d'; ctx.fillRect(x - 3, y + R * .5 - R * .5, 6, 5); }); });
   sprites.sort((a, b) => a[0] - b[0]).forEach(s => s[1]());

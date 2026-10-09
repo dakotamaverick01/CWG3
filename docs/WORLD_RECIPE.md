@@ -53,7 +53,7 @@ Every output is a pure function of the inputs above. "Today" is what the code do
 ### 2d. Edge pieces
 - **From:** `edges` (wall, fence, stream) and `roads`.
 - **Output:** instanced wall/fence segments along hex edges; roads continuous across hex borders; streams join 2b.
-- **Today:** painted into the props layer. **Built by:** T4.
+- **Today (T4 done):** with `CW.WORLD` on, `src/world_edges.js` builds them from the map data. Roads: one smooth ribbon per `M.roads` path, draped on the terrain heights (continuous, so no break at hex borders). Brooks: bank + water ribbon along `CW.WATER.streams` (the hex-edge chains; still produced by the painted pass, T6 removes that dependency). Fences: Kenney rail fence, 2 pieces per hex edge, pitched with the slope. Walls: 4 Kenney stones + 3 capstones per hex edge. The painted pass skips these four (`objs.skipEdges`) but still makes every random call, so other props do not move. Buildings, crops, bridge, ford, labels stay painted. **Built by:** T4.
 
 ### 2e. Structures
 - **From:** hex letter `t` (town), `h` (farm), `b` (bridge), `x` (fort), plus a placement table (to be added in T5 at the bottom of this file).
@@ -67,7 +67,7 @@ Every output is a pure function of the inputs above. "Today" is what the code do
 | `render3d.js` `MILL` | mill at hex [6,10] | T5 |
 | `render3d.js` `S.trees` from painted pass | tree positions from painted coordinates | T2 |
 | `CW.WATER` from `render_art.js` | river/stream polylines recorded while painting | T6 |
-| props layer (walls, fences, roads, buildings) | painted per map by `CW.paintArtFeatures` | T4 / T5 |
+| props layer: buildings, bridge, ford, fort, well, haystacks | painted per map by `CW.paintArtFeatures` (walls, fences, roads, brooks now 3D: T4 done) | T5 |
 
 ## 4. The `CW.WORLD` flag (T1 spike)
 

@@ -421,3 +421,10 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Other letters unchanged: meadow, wheat_0, corn_0, farmyard_1 (dirt), rocky_1 (rock), mud_3 (swamp), mud_0 (river bed). No new files, so no ASSET_CREDITS change. Lighting and tint untouched.
 - Done test: pre/after screenshots of the same woods view: gaps went from dark green to warm brown litter (docs/shots/world_t3_woods_pre_after.jpg).
 - Limit: the repo has no dedicated CC0 leaf-litter texture; a truer woods floor needs a new download, John's OK first.
+
+## 2026-10-09 — WORLD T4 (edges), on main
+- Roads, brooks, walls and fences are now built from the map data when CW.WORLD is on: new src/world_edges.js + assets/art/edge_meshes.js (Kenney CC0: rail fence, stones; baked by tools/build_tree_meshes.py).
+- Roads and brooks are continuous ribbons draped on the terrain (no break at hex borders); fences 2 pitched pieces per edge; walls 4 stones + 3 capstones per edge.
+- The painted pass skips just those four (render_art.js skipEdges; random calls kept so other props stay put). Painted layer is back for buildings, crops, bridge, ford, fort, labels (T1 had hidden all of it); painted-coordinate trees stay out (T2 meshes). The hard-coded Millbrook mill stays off until T5.
+- Revert: CW.WORLD = false (top of render3d.js) = old painted roads/walls/fences/brooks. Shots: docs/shots/world_t4_*.jpg.
+- Dependency left for T6: brooks use CW.WATER.streams, still produced by the painted pass.

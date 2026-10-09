@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Bake three Kenney Nature Kit (CC0) meshes into assets/art/tree_meshes.js (base64, no loader needed, works on file://).
+"""Bake Kenney Nature Kit (CC0) meshes into base64 JS files (no loader needed, works on file://):
+  assets/art/tree_meshes.js (3 trees, WORLD T2) and assets/art/edge_meshes.js (rail fence + 2 stones for walls, WORLD T4).
 
 Usage: python3 -I tools/build_tree_meshes.py "<folder with the kit's 'Models/GLTF format'>"
 Download the kit from https://kenney.nl/assets/nature-kit (CC0). The kit itself is NOT stored in the repo, only these 3 baked meshes.
@@ -14,6 +15,13 @@ MESHES = {  # name -> (glb, {material-name: sRGB colour})
     'pine':      ('tree_pineTallA', {'leafsDark': (30, 66, 42), 'woodBarkDark': (78, 56, 38)}),
     'bush':      ('plant_bush', {'grass': (66, 104, 44)}),
 }
+
+EDGE_MESHES = {  # fence + stones (walls are rows of stones along a hex edge); normalised so the x-extent = 1 (length), base at y = 0
+    'fence':  ('fence_simple',     {'wood': (126, 92, 56), 'woodDark': (86, 62, 40)}),
+    'stoneA': ('stone_largeA',     {'dirt': (118, 110, 98), 'grass': (88, 100, 62)}),
+    'stoneB': ('stone_smallFlatA', {'dirt': (124, 116, 104), 'grass': (92, 104, 66)}),
+}
+DEFAULT_COL = (112, 106, 96)
 
 def srgb_to_lin(c):
     c = c / 255.0
@@ -69,22 +77,31 @@ def load_glb(path):
 def b64(a):
     return base64.b64encode(np.ascontiguousarray(a).tobytes()).decode()
 
-def main(folder):
+def bake(folder, meshes, by):
     out = {}
-    for key, (glb, cols) in MESHES.items():
+    for key, (glb, cols) in meshes.items():
         p, n, mats, idx = load_glb(os.path.join(folder, glb + '.glb'))
-        lo, hi = p.min(0), p.max(0); h = hi[1] - lo[1]
-        p = p - np.array([(lo[0] + hi[0]) / 2, lo[1], (lo[2] + hi[2]) / 2]); p /= h
-        col = np.array([cols[m] for m in mats], dtype=np.float64)
+        lo, hi = p.min(0), p.max(0)
+        ref = (hi[1] - lo[1]) if by == 'height' else (hi[0] - lo[0])
+        p = p - np.array([(lo[0] + hi[0]) / 2, lo[1], (lo[2] + hi[2]) / 2]); p /= ref
+        col = np.array([cols.get(m, DEFAULT_COL) for m in mats], dtype=np.float64)
         col = (srgb_to_lin(col) * 255).round().astype(np.uint8)
-        out[key] = {'src': glb, 'n': len(p), 'tris': len(idx) // 3, 'w': round(float(max(hi[0] - lo[0], hi[2] - lo[2]) / h), 3),
+        out[key] = {'src': glb, 'n': len(p), 'tris': len(idx) // 3, 'w': round(float(max(hi[0] - lo[0], hi[2] - lo[2]) / ref), 3),
+                    'h': round(float((hi[1] - lo[1]) / ref), 3), 'd': round(float((hi[2] - lo[2]) / ref), 3),
                     'p': b64(p.astype(np.float32)), 'nm': b64(n.astype(np.float32)), 'c': b64(col), 'i': b64(idx.astype(np.uint16))}
-        print(key, glb, 'verts', len(p), 'tris', len(idx) // 3, 'width/height', out[key]['w'])
-    dst = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', 'art', 'tree_meshes.js')
+        print(key, glb, 'verts', len(p), 'tris', len(idx) // 3, 'w/h/d', out[key]['w'], out[key]['h'], out[key]['d'])
+    return out
+
+def write(out, name, var):
+    dst = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', 'art', name)
     with open(dst, 'w') as f:
         f.write("'use strict';\n// Baked from Kenney Nature Kit (CC0, https://kenney.nl/assets/nature-kit) by tools/build_tree_meshes.py. Do not edit by hand.\n")
-        f.write('CW.TREEMESH = ' + json.dumps(out, separators=(',', ':')) + ';\n')
+        f.write(var + ' = ' + json.dumps(out, separators=(',', ':')) + ';\n')
     print('wrote', os.path.normpath(dst), os.path.getsize(dst), 'bytes')
+
+def main(folder):
+    write(bake(folder, MESHES, 'height'), 'tree_meshes.js', 'CW.TREEMESH')
+    write(bake(folder, EDGE_MESHES, 'length'), 'edge_meshes.js', 'CW.EDGEMESH')
 
 if __name__ == '__main__':
     main(sys.argv[1])
