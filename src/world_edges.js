@@ -27,9 +27,6 @@ CW.WorldEdges = (function () {
     out.push(pts[pts.length - 1]); return out;
   }
 
-  // nearest point on a polyline to p: [x, y, distance]
-  function nearOn(poly, p) { let best = [0, 0, 1e9]; for (let i = 0; i < poly.length - 1; i++) { const a = poly[i], b = poly[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1,
-      t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2)), x = a[0] + dx * t, y = a[1] + dy * t, d = Math.hypot(p[0] - x, p[1] - y); if (d < best[2]) best = [x, y, d]; } return best; }
   // ---------- ribbons (roads, brooks) ----------
   // cross = [[offset px, [r,g,b,a]], ...] from one side to the other; returns a Mesh draped on the terrain
   function ribbon(line, cross, W3, lift, mat, wf, af) {   // wf[i] widens/narrows the cross-section at point i, af[i] fades its alpha (both optional)
@@ -108,22 +105,18 @@ CW.WorldEdges = (function () {
     for (const rd of M.roads) { const hw = rd.major ? 6.5 : 5, line = smooth(rd.p.map(p => CW.center(...p)), 4);
       const cross = [[-hw * 1.4, col(70, 52, 30, 0)], [-hw * 1.08, col(86, 64, 38, .5)], [-hw * .72, col(136, 108, 70, 1)], [0, col(158, 130, 88, 1)], [hw * .72, col(136, 108, 70, 1)], [hw * 1.08, col(86, 64, 38, .5)], [hw * 1.4, col(70, 52, 30, 0)]];
       const me = ribbon(line, cross, W3, 1.3, roadMat); scene.add(me); parts.push(me); stats.roads++; }
-    // brooks (hex-edge chains already meandered by the data pass). Each brook runs from a faded spring to a mouth that is carried on to the river bank, widening as it goes
-    const brookMat = rmat([.86, .86, .82], -5), river = (CW.WATER && CW.WATER.river) || null, rhw = ((CW.WATER && CW.WATER.rw) || 36) * .5, pebbles = [], pr = CW.rng(4242);
-    for (let pts of ((CW.WATER && CW.WATER.streams) || [])) { if (pts.length < 2) continue;
-      if (river && river.length > 1) {   // the end nearer the river is the mouth: join it to the river bank so it never stops short in open grass
-        const d0 = nearOn(river, pts[0]), d1 = nearOn(river, pts[pts.length - 1]); if (d0[2] < d1[2]) pts = pts.slice().reverse();
-        const e = nearOn(river, pts[pts.length - 1]), last = pts[pts.length - 1];
-        if (e[2] > 2 && e[2] < CW.R * 3) { const k = Math.max(2, Math.ceil(e[2] / 12)), dx = e[0] - last[0], dy = e[1] - last[1], L = Math.hypot(dx, dy), stop = Math.max(0, e[2] - rhw * .15) / e[2];   // run 85% of the way into the water so the ends overlap
-          for (let i = 1; i <= k; i++) pts = pts.concat([[last[0] + dx * stop * i / k + (dy / L) * Math.sin(i * 1.7) * 2, last[1] + dy * stop * i / k - (dx / L) * Math.sin(i * 1.7) * 2]]); } }
+    // brooks: the water itself is the river's own water ribbon (render3d.js buildRibbon); here only the mud bank under it and the gravel beside it.
+    // Lines come from the map file alone (world_water.js), spring first, mouth last.
+    const bankMat = rmat([.86, .84, .78], -1), pebbles = [], pr = CW.rng(4242);
+    for (const pts of (CW.WorldWater ? CW.WorldWater.fromMap(M).streams : [])) { if (pts.length < 2) continue;
       const line = smooth(pts, 4), n = line.length, wf = new Float32Array(n), af = new Float32Array(n); let run = 0;
-      for (let i = 0; i < n; i++) { if (i) run += Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]); }
+      for (let i = 1; i < n; i++) run += Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]);
       let acc = 0; for (let i = 0; i < n; i++) { if (i) acc += Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]); const u = acc / (run || 1);
-        wf[i] = .8 + 1.0 * u * u; af[i] = Math.min(1, acc / 70);   // narrow + faded at the spring, wide at the mouth
-        if (i % 3 === 1 && i < n - 1) { const a = line[i - 1], b = line[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L, sd = (i % 2 ? 1 : -1) * (6.4 * wf[i] + pr() * 1.5), sz = 2.2 + pr() * 2.2;   // gravel along the banks
+        wf[i] = .55 + .75 * u; af[i] = Math.min(1, acc / 70);                                              // same taper as the water ribbon
+        if (i % 4 === 1 && i < n - 1) { const a = line[i - 1], b = line[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L, sd = (i % 2 ? 1 : -1) * (7.6 * wf[i] + pr() * 2.5), sz = 1.3 + pr() * 1.5;
           pebbles.push({ kind: 'stoneB', x: line[i][0] + nx * sd, y: line[i][1] + ny * sd, lift: .4, yaw: pr() * 6.283, pitch: 0, rnd: pr(), sx: sz * 1.4, sy: sz * 4, sz: sz * 1.2 }); } }
-      const cross = [[-9, col(70, 56, 34, 0)], [-6.6, col(74, 58, 36, .5)], [-4.4, col(92, 76, 52, .85)], [-2.6, col(52, 82, 88, 1)], [0, col(62, 98, 104, 1)], [2.6, col(52, 82, 88, 1)], [4.4, col(92, 76, 52, .85)], [6.6, col(74, 58, 36, .5)], [9, col(70, 56, 34, 0)]];
-      const me = ribbon(line, cross, W3, 1.5, brookMat, wf, af); me.renderOrder = 2; scene.add(me); parts.push(me); stats.brooks++; }
+      const cross = [[-11, col(70, 56, 34, 0)], [-8, col(72, 56, 34, .55)], [-5.4, col(60, 48, 30, .95)], [0, col(46, 38, 26, 1)], [5.4, col(60, 48, 30, .95)], [8, col(72, 56, 34, .55)], [11, col(70, 56, 34, 0)]];
+      const me = ribbon(line, cross, W3, 1.0, bankMat, wf, af); me.renderOrder = 0; scene.add(me); parts.push(me); stats.brooks++; }
     // fences and walls: one instanced mesh per kind
     const list = pieces(M, W3).concat(pebbles); list.W3 = W3;
     const inst = instanced(scene, list, EM, ['fence', 'stoneA', 'stoneB'], fog); inst.forEach(m => parts.push(m)); stats.pieces += list.length;

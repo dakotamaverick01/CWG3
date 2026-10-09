@@ -434,3 +434,8 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Painted buildings/bridge/ford/fort skipped while CW.WORLD is on. Kit has no houses: stand-ins (tents, logs, rows).
 - Brook (John's feedback): joins the river, faded spring, wider mouth, gravel banks.
 - Next: T6 water, when John says go.
+
+## 2026-10-09 — WORLD T6 (water) + T7 (motion), on main
+- New src/world_water.js: rivers and brooks come from the map file only (CW.WATER no longer read while CW.WORLD is on). Brooks use the river's own water shader (narrower, shallower, fade at the spring) and end in the river. world_edges.js keeps only the brook's mud bank + gravel.
+- T7: one Living switch already drove everything; Options label now says so; added R3.snap() test helper. Off = frozen (pixel-identical), on = slow drift.
+- Next: John decides about buildings / a broader 3D-asset plan (tents are stand-ins). T8 proof map still open.

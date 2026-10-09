@@ -112,14 +112,14 @@ CW.R3 = (function () {
   }
   // creek mask at 1/4 scale, once per map load: A = water, softened ~4 px at the bank (foam band). Then the wake field and the brook threads
   function buildWater() {
-    const q = 4, w = Math.ceil(MW / q), h = Math.ceil(MH / q), W = CW.WATER || hexWater(); let A = document.createElement('canvas'); A.width = w; A.height = h;
+    const q = 4, w = Math.ceil(MW / q), h = Math.ceil(MH / q), W = CW.WORLD && CW.WorldWater ? CW.WorldWater.fromMap(M) : (CW.WATER || hexWater()); let A = document.createElement('canvas'); A.width = w; A.height = h;
     const a = A.getContext('2d'); a.filter = 'blur(1px)'; a.scale(1 / q, 1 / q); a.lineCap = a.lineJoin = 'round';
-    if (W.river && W.river.length > 1) { CW.smoothPath(a, W.river); a.strokeStyle = '#fff'; a.lineWidth = (W.rw || CW.R * .46) * 1.05; a.stroke(); }
+    for (const rv of (W.rivers || [W.river])) if (rv && rv.length > 1) { CW.smoothPath(a, rv); a.strokeStyle = '#fff'; a.lineWidth = (W.rw || CW.R * .46) * 1.05; a.stroke(); }
     const d = new Uint8Array(a.getImageData(0, 0, w, h).data.buffer.slice(0)); A.width = A.height = 0; A = null;   // release the scratch canvas
     if (U.uWater.value) U.uWater.value.dispose();
     const t = new THREE.DataTexture(d, w, h, THREE.RGBAFormat); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; U.uWater.value = t; U.uMap.value.set(MW, MH);
     if (CW.WAKE) { try { CW.WAKE.build(ren, W, hAt, MW, MH); } catch (e) { console.warn('wake field skipped:', e.message); } }
-    buildThreads(W.streams || []);
+    buildThreads(CW.WORLD && CW.WorldWater ? [] : (W.streams || []));   // 3D world: brooks are real water ribbons below, no painted-style threads
     try { buildRibbon(W); } catch (e) { console.warn('3D creek skipped:', e.message); }
   }
 
@@ -167,22 +167,28 @@ CW.R3 = (function () {
     }`;
   function buildRibbon(W) {
     if (S.ribbon) { scene.remove(S.ribbon); S.ribbon.geometry.dispose(); S.ribbon = null; }
-    if (!W.river || W.river.length < 2 || !window.CW.WATERFLOW) return;
-    let pts = W.river; if (hAt(...pts[0]) < hAt(...pts[pts.length - 1]) - 1) pts = pts.slice().reverse();
-    const rw = (W.rw || CW.R * .46) * 1.04, period = rw * 2, c = [];
-    for (let i = 0; i < pts.length - 1; i++) { const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;   // CW.smoothPath's curve
-      const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6], c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6], n = Math.max(2, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 4));
-      for (let k = i ? 1 : 0; k <= n; k++) { const t = k / n, u = 1 - t; c.push([u * u * u * p1[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * p2[0], u * u * u * p1[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * p2[1]]); } }
+    const lines = []; for (const rv of (W.rivers || [W.river])) if (rv && rv.length > 1) lines.push({ pts: rv, w: (W.rw || CW.R * .46) * 1.04, brook: false });
+    if (CW.WORLD) for (const st of (W.streams || [])) if (st.length > 1) lines.push({ pts: st, w: CW.R * .34, brook: true });   // brooks: same water, narrower, shallower; the mouth is the LAST point
+    if (!lines.length || !window.CW.WATERFLOW) return;
     const br = M.all.filter(([q, r]) => M.ter(q, r) === 'b').map(h => CW.center(...h)), fd = M.all.filter(([q, r]) => M.ter(q, r) === 'd').map(h => CW.center(...h));
-    const near = (L, x, y, d) => L.reduce((m, p) => Math.min(m, Math.hypot(p[0] - x, p[1] - y)), 1e9) < d;
     const fall = (L, x, y, d0, d1) => { const d = L.reduce((m, p) => Math.min(m, Math.hypot(p[0] - x, p[1] - y)), 1e9); return Math.max(0, Math.min(1, (d - d0) / (d1 - d0))); };
-    const COLS = 7, pos = [], uv = [], fl = [], ax = [], ad = [], idx = []; let s = 0;
-    c.forEach(([x, y], i) => { const [px, py] = c[Math.max(0, i - 1)], [nx, ny] = c[Math.min(c.length - 1, i + 1)], L = Math.hypot(nx - px, ny - py) || 1, tx = (nx - px) / L, ty = (ny - py) / L;
-      if (i) s += Math.hypot(x - c[i - 1][0], y - c[i - 1][1]);
-      const dep = Math.min(fall(br, x, y, CW.R * .55, CW.R * .8), .12 + .88 * fall(fd, x, y, CW.R * .35, CW.R * .75));   // gone under bridges, shallow at fords
-      for (let k = 0; k < COLS; k++) { const f = k / (COLS - 1), o = (f - .5) * rw, qx = x - ty * o, qy = y + tx * o;
-        pos.push(qx - MW / 2, hAt(qx, qy) + .8, qy - MH / 2); uv.push(f, s / period); fl.push(tx, ty); ax.push(f); ad.push(dep); }
-      if (i) for (let k = 0; k < COLS - 1; k++) { const a = (i - 1) * COLS + k, b = i * COLS + k; idx.push(a, b, a + 1, a + 1, b, b + 1); } });
+    const COLS = 7, pos = [], uv = [], fl = [], ax = [], ad = [], idx = []; let vb = 0;
+    for (const ln of lines) {
+      let pts = ln.pts; if (!ln.brook && hAt(...pts[0]) < hAt(...pts[pts.length - 1]) - 1) pts = pts.slice().reverse();   // downstream = downhill (brooks already end at their mouth)
+      const rw = ln.w, period = rw * 2, c = [];
+      for (let i = 0; i < pts.length - 1; i++) { const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;   // CW.smoothPath's curve
+        const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6], c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6], n = Math.max(2, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 4));
+        for (let k = i ? 1 : 0; k <= n; k++) { const t = k / n, u = 1 - t; c.push([u * u * u * p1[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * p2[0], u * u * u * p1[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * p2[1]]); } }
+      let total = 0; for (let i = 1; i < c.length; i++) total += Math.hypot(c[i][0] - c[i - 1][0], c[i][1] - c[i - 1][1]);
+      let s = 0;
+      c.forEach(([x, y], i) => { const [px, py] = c[Math.max(0, i - 1)], [nx, ny] = c[Math.min(c.length - 1, i + 1)], L = Math.hypot(nx - px, ny - py) || 1, tx = (nx - px) / L, ty = (ny - py) / L;
+        if (i) s += Math.hypot(x - c[i - 1][0], y - c[i - 1][1]);
+        let dep = Math.min(fall(br, x, y, CW.R * .55, CW.R * .8), .12 + .88 * fall(fd, x, y, CW.R * .35, CW.R * .75)), wf = 1;   // gone under bridges, shallow at fords
+        if (ln.brook) { const u = s / (total || 1); wf = .55 + .75 * u; dep *= (.62 + .3 * u) * Math.min(1, s / 55); }               // narrow faded spring, wider and deeper toward the mouth
+        for (let k = 0; k < COLS; k++) { const f = k / (COLS - 1), o = (f - .5) * rw * wf, qx = x - ty * o, qy = y + tx * o;
+          pos.push(qx - MW / 2, hAt(qx, qy) + (ln.brook ? 1.6 : .8), qy - MH / 2); uv.push(f, s / period); fl.push(tx, ty); ax.push(f); ad.push(dep); }
+        if (i) for (let k = 0; k < COLS - 1; k++) { const a = vb + (i - 1) * COLS + k, b = vb + i * COLS + k; idx.push(a, b, a + 1, a + 1, b, b + 1); } });
+      vb += c.length * COLS; }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     geo.setAttribute('aFlow', new THREE.Float32BufferAttribute(fl, 2)); geo.setAttribute('aX', new THREE.Float32BufferAttribute(ax, 1)); geo.setAttribute('aD', new THREE.Float32BufferAttribute(ad, 1)); geo.setIndex(idx);
     if (!S.rmat) { const WK = CW.WAKE ? CW.WAKE.U : { uWake: { value: null }, uWBox: { value: new THREE.Vector4() }, uWTx: { value: new THREE.Vector2(1, 1) } };
@@ -366,6 +372,8 @@ CW.R3 = (function () {
   function setLive(on) { on = !!(on && ok); if (on === S.live) return; S.live = on; U.uLive.value = on ? 1 : 0; if (S.threads) S.threads.visible = on; S.wk.clear(); if (CW.WAKE) CW.WAKE.clear();
     if (on) { S.prev = performance.now(); S.acc = S.n = 0; S.win0 = 0; if (!S.raf) S.raf = requestAnimationFrame(tick); } else { if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; } warmFog(); } }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && S.live && !S.raf) { S.prev = performance.now(); S.acc = S.n = 0; S.win0 = 0; S.raf = requestAnimationFrame(tick); } });
+  // test helper: render the ground once at time t (seconds) with Living on/off and return it as a PNG data URL (used to prove 'off freezes, on moves')
+  function snap(t, live) { if (!ok || !S.last) return null; const k = U.uLive.value; U.uLive.value = live ? 1 : 0; U.uT.value = t; ren.render(scene, cam); const u = ren.domElement.toDataURL('image/png'); U.uLive.value = k; return u; }
   // timing helper for tests: ms per ground render (synchronised with a 1-px read)
   function bench(n = 30, live = S.live) { if (!ok || !S.last) return null; const keep = U.uLive.value, px = new Uint8Array(4), gl = ren.getContext(); U.uLive.value = live ? 1 : 0;
     ren.render(scene, cam); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now();
@@ -460,5 +468,5 @@ CW.R3 = (function () {
   const tilt = dv => { S.tilt = Math.max(TILT_MIN, Math.min(TILT_MAX, S.tilt + dv)); return S.tilt; };
   function sweep(gc, fitZ, redraw) { if (!ok) return; S.anim = { t0: performance.now(), dur: 3200, tilt: 32, z: Math.min(gc.z, fitZ * .75) };
     const loop = () => { redraw(); if (S.anim) requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
-  return { init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, bench, onSlow: f => { S.onSlow = f; }, wakeSource: f => { S.src = f; }, wade: (x0, y0, x1, y1, s) => { if (S.live && CW.WAKE && CW.WAKE.ok) CW.WAKE.trail(x0, y0, x1, y1, s * WAKE_S); }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get renderer() { return ren; }, get threads() { return S.threads; }, get ribbon() { return S.ribbon; }, get camera() { return cam; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
+  return { init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, bench, snap, onSlow: f => { S.onSlow = f; }, wakeSource: f => { S.src = f; }, wade: (x0, y0, x1, y1, s) => { if (S.live && CW.WAKE && CW.WAKE.ok) CW.WAKE.trail(x0, y0, x1, y1, s * WAKE_S); }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get renderer() { return ren; }, get threads() { return S.threads; }, get ribbon() { return S.ribbon; }, get camera() { return cam; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
 })();

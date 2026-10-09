@@ -40,15 +40,15 @@ Every output is a pure function of the inputs above. "Today" is what the code do
 - **Today:** already data-driven. **Built by:** T3 (one visibly different texture per letter).
 
 ### 2b. Water
-- **From:** `w`, `b`, `d` hexes (river/creek ribbon) and `stream` edges (brooks).
-- **Output:** ribbon + bank, still water when Living is off, slow flow when on.
-- **Today:** the mask is built from `CW.WATER`, which the *painted-map pass* records as a side effect (`render_art.js`). `hexWater()` in `render3d.js` is the data-driven fallback. **Dependency:** while `CW.WORLD` is on, the painted layer is still painted (then blanked) so `CW.WATER` still exists. T6 must switch to the hex/edge data and delete the painted-pass dependency.
-- **Built by:** T6.
+- **From:** hex letters `w`, `b`, `d` (river, bridge, ford) and `stream` hex edges (brooks). Nothing else.
+- **How:** `src/world_water.js` (`CW.WorldWater.fromMap(M)`): each connected group of wet hexes is walked into a centre line (carried off the map if it ends on the border); each chain of stream edges becomes a meandering line, spring first, mouth last, and the mouth is run on into the nearest river.
+- **Output:** one water ribbon per line in `render3d.js` (`buildRibbon`), all drawn with the same water shader: river wide and deep, brooks narrower, shallower, fading at the spring. Mud bank + gravel for brooks in `world_edges.js`. Living off = the same ribbon, frozen (still water, not missing water).
+- **Today (T6 done):** with `CW.WORLD` on the painted pass is no longer read for water (`CW.WATER` is only used when the 3D world is off). **Built by:** T6.
 
 ### 2c. Vegetation
 - **From:** `f` (forest), `o` (orchard), `c` (crops); `g` has none.
 - **Output:** instanced tree/bush meshes from forest and orchard hexes; thinned where a unit stands; slow sway only with Living on. Crop fields stay ground texture + the existing wheat/corn flow.
-- **Today:** trees are camera-facing billboards placed at *painted* coordinates (`S.trees` from `CW.paintArtFeatures`). With `CW.WORLD` on they are empty (spike). **Built by:** T2 (meshes), T7 (sway).
+- **Today:** instanced Kenney meshes from forest/orchard hexes (T2); sway runs under the single Living switch (T7). **Built by:** T2 (meshes), T7 (sway).
 
 ### 2d. Edge pieces
 - **From:** `edges` (wall, fence, stream) and `roads`.
@@ -66,7 +66,7 @@ Every output is a pure function of the inputs above. "Today" is what the code do
 |---|---|---|
 | `render3d.js` `MILL` | mill at hex [6,10] | T5 (done: the hex now lives in the map file's `structures` list) |
 | `render3d.js` `S.trees` from painted pass | tree positions from painted coordinates | T2 |
-| `CW.WATER` from `render_art.js` | river/stream polylines recorded while painting | T6 |
+| `CW.WATER` from `render_art.js` | river/stream polylines recorded while painting | T6 (done: only read when `CW.WORLD` is off) |
 | props layer: buildings, bridge, ford, fort, well, haystacks | painted per map by `CW.paintArtFeatures`; roads/brooks/walls/fences 3D (T4), buildings/bridge/ford/fort 3D (T5, painted copies skipped while `CW.WORLD` is on). Crops and labels still painted | T5 done |
 
 ## 4. The `CW.WORLD` flag (T1 spike)
@@ -96,3 +96,6 @@ Every output is a pure function of the inputs above. "Today" is what the code do
 | map field `structures:[[c,r,'mill']]` | stone platform, canvas-roofed hut, big log pile, rock | stands on the side of the hex that faces its water neighbours; hex comes only from the map file |
 
 Brooks (T4, reworked in T5): the end nearer the river is run on into the river bank so a brook never stops in open grass; the other end is a narrow faded spring. Width grows from spring to mouth and the banks carry scattered gravel (Kenney flat stone).
+
+## 7. Motion: one switch (T7)
+Options > "Living landscape" is the only switch (default on; the slow-frame guard can turn it off for a session). It drives one shared uniform (`uLive`) that controls cloud shadows, wind in the wheat, river and brook flow (including the wake field), tree sway, and the slow haze colour cycle. Off = every one of them frozen at frame 0 with the layout unchanged (test: two renders 3 s apart are pixel-identical). Structures, roads, walls and fences never move. No effect is faster than the old ones: clouds drift about 9 map px/s, sway is under 1 rad/s, water flipbook 6 fps with cross-fade.
