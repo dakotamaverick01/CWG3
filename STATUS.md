@@ -1,9 +1,16 @@
 # CWG3 — STATUS (read this first every session)
 
-_Last updated: 2026-09-26 · Session 6_
-
-## Where we are
-Phase 0 ✅ · Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ · Battalion-scale ✅ · Phase 4a combat ✅ · Phase 4b AI v1 ⏭ next
+## START HERE (updated 2026-10-09)
+- **What it is:** HTML5/JS remake of *Robert E. Lee: Civil War Generals 2*. V1 = one battle, Millbrook, vs the computer. Tilted 3D view (three.js, `src/render3d.js`) over a hex map; the painted map is kept for the minimap and flat fallback (key 3).
+- **How John runs it:** double-click `play.html` (file://, no server). Art must be embedded as base64 (`assets/art/*.js`); loading images by URL alone breaks the 3D ground (canvas taint).
+- **Where we are:** rules + AI work. Focus is visual polish toward an immersive 3D world. Done: tilted camera, living landscape (water/wheat/clouds/haze, default on), battle smoke, mesh ground, 3D trees + mill, CC0 meadow textures (9 Oct). Daytime summer only. No new maps or battles until Millbrook looks right.
+- **How we work (GitHub is the source of truth):** Claude works from a cloud clone of this repo (attach it with add_repo, push access; the Claude GitHub App is installed on John's account) and pushes branches. John then runs `git pull` on his Mac. Commit everything: Claude cannot see uncommitted files on the Mac unless the desktop link is up. This works from a phone or plane.
+- **Branches:** `main` = through world-mesh. `world-objects` = trees + mill + CC0 meadow, pushed, not merged. Merge to main only after John reviews screenshots (backup tag first); John can merge from the GitHub phone app.
+- **Open items (last noted):** wire title/menu/after-action art (`assets/incoming/title/`); AI moves glide one at a time; check sluggishness on the Mac; next world pass not chosen yet.
+- **Plan and docs:** `WORK_PLAN.md` (v3, 27 Sep; out of date on the 3D direction), `docs/`, `plan/`. `HANDOFF_PROMPT.md` still describes the old battalion/standing-orders design, so don't trust its "how it plays" section. Newest session notes are at the BOTTOM of this file: read only the last 3 sections.
+- **Run, verify, commit, push:** use the `cwg3-run-and-verify` skill.
+- **Assets:** own, open-source or CC0 only; log every source in `ASSET_CREDITS.md`.
+- **John's rules:** short replies, explain new jargon, multiple-choice questions, read only needed files, screenshots once at the end, stop and ask after 2 failed fixes.
 
 ## Done
 - Folder set up: `docs/`, `style-tests/`, `assets/incoming/`, `src/` (empty until Phase 2)
