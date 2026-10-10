@@ -1,5 +1,5 @@
 'use strict';
-// WORLD pass T2: trees as real 3D meshes (Kenney Nature Kit, CC0; baked by tools/build_tree_meshes.py into assets/art/tree_meshes.js).
+// WORLD pass T2: trees as real 3D meshes (Kenney Nature Kit, CC0; baked by tools/bake_models.py into assets/art/models.js).
 // Placement is a pure function of the map file (hex letters f = forest, o = orchard): no painted coordinates, no Millbrook hexes.
 // Each hex gets its own seeded random numbers, so editing one hex in the map file changes only that hex's trees.
 // Rendering: 3 kinds x (1 instanced mesh + 1 instanced soft ground shadow). Where a unit stands the hex thins out (same rule as before:
@@ -65,7 +65,7 @@ CW.WorldTrees = (function () {
 
   // env: { scene, M, W3 (map px -> world), occ (DataTexture of unit-occupied hexes), U (shared uniforms uT, uLive) }
   function build(env) {
-    const { scene, M, W3, occ, U } = env, KM = CW.TREEMESH; if (!KM) throw new Error('tree_meshes.js missing');
+    const { scene, M, W3, occ, U } = env, KM = CW.TREEMESH; if (!KM) throw new Error('models.js missing');
     dispose(); const list = place(M), parts = [];
     const shared = { uOcc: { value: occ }, uOccN: { value: new THREE.Vector2(M.cols, M.rows) }, uT: U.uT, uLive: U.uLive,
       uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };

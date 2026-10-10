@@ -1,26 +1,27 @@
 # REPORT (Claude's result for the last brief) — overwritten after each task
-Brief: WORLD_PLAN T6 (Water) and T7 (Motion), John's 9 Oct request
+Brief: John 9 Oct (Opus): model the 3D pieces and set up a sustainable asset pipeline; open-source first, generate the rest, Blender last.
 Branch / commit: main
-Result: DONE
+Result: DONE (first set)
 
 ## What changed (≤5 lines)
-- T6: new src/world_water.js builds river and brook lines from the map file only; render3d draws brooks with the river's water shader (same colour/flow), mouth runs into the river. CW.WATER is read only when CW.WORLD is off.
-- world_edges.js brook is now just mud bank + gravel under the water ribbon.
-- T7: the single Options switch already drove clouds, wheat, water, tree sway; label updated; R3.snap() test helper added.
+- One pipeline: assets/models/{src,MANIFEST.json,palette.json,inbox} -> tools/bake_models.py -> assets/art/models.js; credits auto-written to assets/models/CREDITS.md.
+- 13 period models written as code (tools/modelkit.py, tools/gen_models.py), saved as standard .glb (open in Blender too).
+- world_structures.js places them from map data: towns facing roads (church + store), farms, grist mill, stone bridge, earthwork fort.
+- tools/model_gallery.html: double-click to review every model. docs/ASSET_PIPELINE.md: rules, shopping list, how to add a found model.
 
 ## Files touched
-src/world_water.js (new), src/render3d.js (buildWater, buildRibbon, snap), src/world_edges.js, src/menu.js (label), play.html, docs/WORLD_RECIPE.md, docs/WORLD_PLAN.md, STATUS.md
+tools/modelkit.py, tools/gen_models.py, tools/bake_models.py, tools/model_gallery.html (new); tools/build_tree_meshes.py + 3 old baked files (removed); assets/models/** (new); assets/art/models.js (new); src/world_structures.js (rewritten); src/world_trees.js, src/world_edges.js (comments/errors); play.html; docs.
 
 ## How to revert
-CW.WORLD = false (top of src/render3d.js) or git revert the T6/T7 commit.
+git revert the commit, or CW.WORLD = false for the painted look.
 
 ## Evidence
-docs/shots/world_t6_brook_joins_river.png, world_t6_bridge_river.png. Tests: map with an extra stream edge gives 2 water lines instead of 1; river line equals the painted one (only the off-map end padding differs); snap() at t=100 vs 103 s: Living off diff 0.0, Living on mean diff 31.9 (cloud shadow drift).
+docs/shots/assets_gallery.png, assets_town.png, assets_farm.png, assets_bridge_mill.png, assets_fort.png. Kenney meshes: same triangles as the old bakes (checked).
 
 ## Open questions for John / Grok
-1. Real frame rate with the extra water ribbons is unverified on John's Mac.
-2. Wake field still uses only the longest river; side rivers get flow but no wake.
-3. Buildings are still stand-in tents; broader 3D asset plan needed.
+1. Look and scale (2.4 px per metre): too small/large next to units?
+2. Store facade faces the main road, so from the default camera you see its back. OK?
+3. Which next: more generated pieces (worm fence, covered bridge, wagons, cemetery) or John's found models first?
 
 ## Suggested next brief (one line)
-Decide the building/3D-asset approach; T8 proof map afterwards.
+John reviews gallery + in-game; then generate the next batch or vet his finds.

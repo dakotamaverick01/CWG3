@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CWG3 model gallery</title>
+<style>
+  :root { --bg: #2a241c; --ink: #efe4cc; --dim: #b9a98a; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 14px/1.4 Georgia, serif; overflow: hidden; }
+  #ui { position: fixed; top: 0; left: 0; right: 0; padding: 10px 14px; background: rgba(30, 24, 16, .85); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; z-index: 2; }
+  #ui b { font-size: 16px; } #ui span { color: var(--dim); }
+  button { background: #5a4630; color: var(--ink); border: 1px solid #8a6c48; border-radius: 4px; padding: 3px 10px; font: inherit; cursor: pointer; }
+  .lab { position: fixed; transform: translate(-50%, 0); color: var(--ink); font-size: 12px; text-align: center; pointer-events: none; text-shadow: 0 1px 2px #000; white-space: nowrap; }
+  .lab i { color: var(--dim); font-style: normal; font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="ui"><b>CWG3 model gallery</b><span>every model in assets/art/models.js, at real size (metres). Drag to orbit, wheel to zoom.</span>
+  <button id="spin">pause spin</button><button id="sun">flip sun</button></div>
+<canvas id="cv"></canvas>
+<script src="../src/vendor/three.min.js"></script>
+<script>window.CW = {};</script>
+<script src="../assets/art/models.js"></script>
+<script>
+'use strict';
+// Same shading as the game's instanced pieces (world_edges.js IVS/IFS): one flat colour per material, low western sun.
+const VS = `attribute vec3 color; uniform vec3 uSun; uniform float uYaw; varying vec3 vCol;
+  void main() { float c = cos(uYaw), s = sin(uYaw); vec3 p = vec3(position.x * c + position.z * s, position.y, -position.x * s + position.z * c);
+    vec3 n = vec3(normal.x * c + normal.z * s, normal.y, -normal.x * s + normal.z * c);
+    float lam = max(dot(normalize(n), uSun), 0.0); vCol = color * (0.52 + 0.62 * lam) * vec3(1.04, 0.99, 0.88);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }`;
+const FS = `varying vec3 vCol; void main() { gl_FragColor = vec4(vCol, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
+const dec = (s, T) => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new T(u.buffer); };
+const cv = document.getElementById('cv'), ren = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });
+ren.setPixelRatio(Math.min(devicePixelRatio, 2)); ren.setClearColor(0x6f7a5a);
+const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(35, 1, .5, 2000);
+const sun = { value: new THREE.Vector3(-.5, .75, .25).normalize() }, items = [];
+// preview size for models normalised to height 1 / length 1 (from the manifest's preview_m)
+const PREV = { broadleaf: 14, pine: 18, bush: 2, fence: 3.5, stoneA: 1.2, stoneB: 0.8, logsBig: 1.4, stump: .6, rockA: 2.5, rockC: 2.5, stepRocks: 6 };
+const keys = Object.keys(CW.MODELS).sort((a, b) => (CW.MODELS[a].norm === 'meters') - (CW.MODELS[b].norm === 'meters') || a.localeCompare(b)).reverse();
+let x = 0, row = 0, rowW = 0; const GAP = 4, MAXW = 80, rows = [[]];
+keys.forEach(k => { const m = CW.MODELS[k], s = m.norm === 'meters' ? 1 : (PREV[k] || 3) / (m.norm === 'height' ? 1 : 1), w = m.w * s;
+  if (rowW + w > MAXW && rows[row].length) { row++; rows[row] = []; rowW = 0; } rows[row].push({ k, s, w }); rowW += w + GAP; });
+rows.forEach((r, ri) => { const tot = r.reduce((a, it) => a + it.w + GAP, -GAP); let cx = -tot / 2;
+  r.forEach(it => { const m = CW.MODELS[it.k], g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(dec(m.p, Float32Array), 3)); g.setAttribute('normal', new THREE.BufferAttribute(dec(m.nm, Float32Array), 3));
+    g.setAttribute('color', new THREE.BufferAttribute(dec(m.c, Uint8Array), 3, true)); g.setIndex(new THREE.BufferAttribute(dec(m.i, Uint16Array), 1));
+    const mat = new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: FS, uniforms: { uSun: sun, uYaw: { value: 0 } }, side: THREE.DoubleSide });
+    const me = new THREE.Mesh(g, mat); me.scale.setScalar(it.s); me.position.set(cx + it.w / 2, 0, -ri * 32); scene.add(me);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(it.w * .62, 32), new THREE.MeshBasicMaterial({ color: 0x5d6848 })); disc.rotation.x = -Math.PI / 2; disc.position.copy(me.position); disc.position.y = -.02; scene.add(disc);
+    const lab = document.createElement('div'); lab.className = 'lab'; lab.innerHTML = `${it.k}<br><i>${m.tris} tris · ${m.norm === 'meters' ? m.h.toFixed(1) + ' m tall' : 'kit, shown ~' + (PREV[it.k] || 3) + ' m'}</i>`; document.body.appendChild(lab);
+    items.push({ me, lab, mat }); cx += it.w + GAP; }); });
+const st = { yaw: .3, pitch: .55, dist: 175, spin: true, t: 0 };
+addEventListener('pointerdown', e => { const x0 = e.clientX, y0 = e.clientY, a = st.yaw, b = st.pitch;
+  const mv = ev => { st.yaw = a - (ev.clientX - x0) * .006; st.pitch = Math.max(.08, Math.min(1.4, b + (ev.clientY - y0) * .004)); };
+  const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); }; addEventListener('pointermove', mv); addEventListener('pointerup', up); });
+addEventListener('wheel', e => { st.dist = Math.max(15, Math.min(400, st.dist * (e.deltaY > 0 ? 1.1 : .9))); }, { passive: true });
+document.getElementById('spin').onclick = e => { st.spin = !st.spin; e.target.textContent = st.spin ? 'pause spin' : 'spin'; };
+document.getElementById('sun').onclick = () => { sun.value.x *= -1; sun.value.z *= -1; };
+function frame() {
+  const w = innerWidth, h = innerHeight; if (cv.width !== Math.floor(w * ren.getPixelRatio())) { ren.setSize(w, h); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+  if (st.spin) st.t += .006; items.forEach(it => { it.mat.uniforms.uYaw.value = st.t; });
+  const cz = -(rows.length - 1) * 16; cam.position.set(Math.sin(st.yaw) * Math.cos(st.pitch) * st.dist, Math.sin(st.pitch) * st.dist, cz + Math.cos(st.yaw) * Math.cos(st.pitch) * st.dist); cam.lookAt(0, 4, cz);
+  ren.render(scene, cam);
+  items.forEach(it => { const v = it.me.position.clone(); v.y = -1.5; v.project(cam); it.lab.style.left = ((v.x + 1) / 2 * w) + 'px'; it.lab.style.top = ((1 - v.y) / 2 * h) + 'px'; it.lab.style.display = v.z < 1 ? '' : 'none'; });
+  requestAnimationFrame(frame); }
+frame();
+</script>
+</body>
+</html>

@@ -1,63 +1,114 @@
 'use strict';
-// WORLD pass T5: structures built from the map file (no painted coordinates, no Millbrook hexes). Table: docs/WORLD_RECIPE.md section 2e.
-//   hex letter t -> camp-town (tents, fire, log piles, sign)   h -> farm (barn tent, ploughed rows, logs, stump)
-//   hex letter b -> wooden bridge along the road   d -> stepping stones across the ford   x -> fort (log rampart + tents)   k -> boulders
-//   map field  structures:[[c, r, 'mill'], ...] -> the mill (stand-in: stone platform + canvas-roofed hut + log pile, on the water side of the hex)
-// Meshes are Kenney Nature Kit (CC0) baked by tools/build_tree_meshes.py into assets/art/struct_meshes.js. The kit has NO houses, so these are stand-ins.
+// WORLD structures: buildings, bridge, ford, fort and rocks placed from the map file (no painted coordinates, no Millbrook hexes).
+// Rules (table: docs/WORLD_RECIPE.md section 6):
+//   t town   : every hex gets up to 3 lots; buildings face the road through the hex (or the nearest road / the town's middle).
+//              Each connected town gets one church (hex nearest its middle, if it has 3+ hexes) and one store; the rest are houses.
+//   h farm   : farmhouse facing the road, barn behind it, haystacks, well, woodpile.
+//   b bridge : three-arch stone bridge laid along the road (else across the river).   d ford: stepping stones.
+//   x fort   : ring of earthwork sections facing outward, wedge tents inside.          k knoll: boulders.
+//   map field structures:[[c, r, 'mill'], ...]: stone grist mill with its wheel on the water side.
+// Models: assets/art/models.js (CW.MODELS, baked by tools/bake_models.py from assets/models/MANIFEST.json). Our own buildings are in
+// metres and drawn at K px per metre; kit pieces are normalised and drawn at a pixel height.
 CW.WorldStructures = (function () {
   let parts = [], scene = null;
-  const WATER = new Set(['w', 'b', 'd']);
+  const WATER = new Set(['w', 'b', 'd']), K = 2.4;           // px per metre for our buildings (a 9 m farmhouse = ~22 px, trees are 36-50 px)
+  const front = (fx, fy) => Math.atan2(fx, fy);             // yaw that turns a model's front (+Z) toward map direction (fx, fy)
+  const side = (dx, dy) => Math.atan2(-dy, dx);              // yaw that turns a model's +X toward map direction (dx, dy)
 
-  // direction a bridge/ford runs: along the road that crosses the hex; otherwise across the river (perpendicular to the water neighbours); otherwise east-west
-  function crossDir(M, c, r) {
-    const here = CW.center(c, r);
+  function roadDir(M, c, r) {   // unit direction of a road through this hex, or null
     for (const rd of M.roads) { const i = rd.p.findIndex(p => p[0] === c && p[1] === r); if (i < 0) continue;
       const a = CW.center(...rd.p[Math.max(0, i - 1)]), b = CW.center(...rd.p[Math.min(rd.p.length - 1, i + 1)]), dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy); if (L > 1) return [dx / L, dy / L]; }
-    let wx = 0, wy = 0; for (const [a, b] of M.nbrs(c, r)) if (WATER.has(M.ter(a, b))) { const q = CW.center(a, b); wx += q[0] - here[0]; wy += q[1] - here[1]; }
-    const L = Math.hypot(wx, wy); return L > 1 ? [-wy / L, wx / L] : [1, 0];
+    return null;
   }
-  // unit vector from a hex centre toward its water neighbours (0,0 if none)
-  function towardWater(M, c, r) {
+  function towardSet(M, c, r, test) {   // unit vector toward the neighbours that pass `test`, or [0, 0]
     const here = CW.center(c, r); let wx = 0, wy = 0;
-    for (const [a, b] of M.nbrs(c, r)) if (WATER.has(M.ter(a, b))) { const q = CW.center(a, b); wx += q[0] - here[0]; wy += q[1] - here[1]; }
+    for (const [a, b] of M.nbrs(c, r)) if (test(a, b)) { const q = CW.center(a, b); wx += q[0] - here[0]; wy += q[1] - here[1]; }
     const L = Math.hypot(wx, wy); return L > 1 ? [wx / L, wy / L] : [0, 0];
   }
+  const onRoad = (M, a, b) => M.roads.some(rd => rd.p.some(p => p[0] === a && p[1] === b));
+  function crossDir(M, c, r) {
+    const d = roadDir(M, c, r); if (d) return d;
+    const [wx, wy] = towardSet(M, c, r, (a, b) => WATER.has(M.ter(a, b))); return wx || wy ? [-wy, wx] : [1, 0];
+  }
+  // connected groups of one letter -> Map(hexKey -> {centre, size, rank}) where rank orders hexes by distance to the group's middle
+  function groups(M, letter) {
+    const key = (c, r) => c + ',' + r, seen = new Set(), info = new Map();
+    for (const [c0, r0] of M.all) { if (M.ter(c0, r0) !== letter || seen.has(key(c0, r0))) continue;
+      const comp = [], st = [[c0, r0]]; seen.add(key(c0, r0));
+      while (st.length) { const h = st.pop(); comp.push(h); for (const [a, b] of M.nbrs(...h)) if (M.ter(a, b) === letter && !seen.has(key(a, b))) { seen.add(key(a, b)); st.push([a, b]); } }
+      const cs = comp.map(h => CW.center(...h)), mx = cs.reduce((s, p) => s + p[0], 0) / cs.length, my = cs.reduce((s, p) => s + p[1], 0) / cs.length;
+      comp.map((h, i) => [h, Math.hypot(cs[i][0] - mx, cs[i][1] - my)]).sort((a, b) => a[1] - b[1] || a[0][0] - b[0][0] || a[0][1] - b[0][1])
+        .forEach(([h], rank) => info.set(key(...h), { mid: [mx, my], size: comp.length, rank })); }
+    return info;
+  }
 
-  // pure placement: [{kind, x, y (map px), lift, yaw, pitch, rnd, sx, sy, sz}]. Sizes in px; 'height' meshes use one scale for all three axes.
+  // pure placement: [{kind, x, y (map px), lift, yaw, pitch, rnd, sx, sy, sz}]
   function place(M) {
-    const R = CW.R, out = [];
-    const put = (kind, x, y, h, yaw, rnd, lift) => out.push({ kind, x, y, lift: lift || 0, yaw, pitch: 0, rnd, sx: h, sy: h, sz: h });
+    const R = CW.R, MD = CW.MODELS || {}, out = [], taken = [];
+    const kit = (kind, x, y, h, yaw, rnd, lift) => out.push({ kind, x, y, lift: lift || 0, yaw, pitch: 0, rnd, sx: h, sy: h, sz: h });
+    const bld = (kind, x, y, yaw, rnd, lift, k = K) => out.push({ kind, x, y, lift: lift || 0, yaw, pitch: 0, rnd, sx: k, sy: k, sz: k });
+    const foot = kind => { const m = MD[kind]; return m ? Math.max(m.x || m.w, m.d) * K * .5 : 10; };
+    const segs = []; for (const rd of M.roads) for (let i = 0; i < rd.p.length - 1; i++) segs.push([CW.center(...rd.p[i]), CW.center(...rd.p[i + 1])]);
+    const roadDist = (x, y) => segs.reduce((m, [p, q]) => { const dx = q[0] - p[0], dy = q[1] - p[1], t = Math.max(0, Math.min(1, ((x - p[0]) * dx + (y - p[1]) * dy) / (dx * dx + dy * dy || 1)));
+      return Math.min(m, Math.hypot(x - p[0] - dx * t, y - p[1] - dy * t)); }, 1e9);
+    const free = (x, y, rad) => taken.every(([a, b, q]) => Math.hypot(a - x, b - y) > (q + rad) * .82);                  // not on another building
+    const offRoad = (kind, x, y, yaw) => { const m = MD[kind]; if (!m) return true; const hx = (m.x || m.w) * K / 2, hz = m.d * K / 2, cx = Math.cos(yaw), sx = Math.sin(yaw);
+      for (const u of [-1, 0, 1]) for (const v of [-1, 0, 1]) { const lx = u * hx, lz = v * hz; if (roadDist(x + lx * cx + lz * sx, y - lx * sx + lz * cx) < 10) return false; }   // footprint corners/edges clear of every road
+      return true; };
+    const claim = (x, y, rad) => taken.push([x, y, rad]);
+    const towns = groups(M, 't');
+
     for (const [c, r] of M.all) {
       const t = M.ter(c, r); if (!'thxbdk'.includes(t)) continue;
       const rand = CW.rng(c * 7919 + r * 104729 + 55), [cx, cy] = CW.center(c, r), a0 = rand() * 6.283;
       if (t === 't') {
-        for (let k = 0; k < 3; k++) { const a = a0 + k * 2.09 + (rand() - .5) * .4, d = R * (.46 + rand() * .12); put(k === 1 ? 'tentOpen' : 'tent', cx + Math.cos(a) * d, cy + Math.sin(a) * d * .9, 10 + rand() * 3, rand() * 6.283, rand()); }
-        put('fire', cx + (rand() - .5) * 8, cy + (rand() - .5) * 8, 2.2, 0, rand());
-        for (let k = 0; k < 2; k++) put('logs', cx + Math.cos(a0 + 1 + k * 3) * R * .32, cy + Math.sin(a0 + 1 + k * 3) * R * .3, 6.5, rand() * 6.283, rand());
-        put('sign', cx + R * .12, cy + R * .62, 11, rand() * .6 - .3, rand());
+        const g = towns.get(c + ',' + r), rd = roadDir(M, c, r), lots = [];
+        if (rd) {   // two lots each side of the road, fronts toward it
+          const [ux, uy] = rd, nx = -uy, ny = ux;
+          for (const s of [1, -1]) for (const a of [-.36, .36]) lots.push({ ax: ux * a * R, ay: uy * a * R, nx: nx * s, ny: ny * s });
+        } else {    // no road here: face the nearest road hex, else the middle of the town
+          let [fx, fy] = towardSet(M, c, r, (a, b) => onRoad(M, a, b)); if (!fx && !fy) { const L = Math.hypot(g.mid[0] - cx, g.mid[1] - cy) || 1; [fx, fy] = [(g.mid[0] - cx) / L, (g.mid[1] - cy) / L]; }
+          for (const a of [-.42, 0, .42]) lots.push({ ax: -fy * a * R, ay: fx * a * R, nx: -fx, ny: -fy, back: true });
+        }
+        for (let i = lots.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [lots[i], lots[j]] = [lots[j], lots[i]]; }   // seeded shuffle
+        const kinds = [];
+        if (g.size >= 3 && g.rank === 0) kinds.push('church');
+        if (g.rank === (g.size >= 3 ? 1 : 0)) kinds.push('store');
+        while (kinds.length < 3) kinds.push(['farmhouse', 'brick_house', 'farmhouse', 'brick_house', 'log_cabin'][Math.floor(rand() * 5)]);
+        let n = 0;
+        for (const lot of lots) { if (n >= kinds.length) break; const kind = kinds[n], m = MD[kind]; if (!m) { n++; continue; }
+          const set = lot.back ? R * .05 : 11 + m.d * K * .5;                                  // set back from the road by half the building's depth
+          const x = cx + lot.ax + lot.nx * set, y = cy + lot.ay + lot.ny * set, rad = foot(kind);
+          const yaw = front(-lot.nx, -lot.ny); if (!free(x, y, rad) || !offRoad(kind, x, y, yaw)) continue;
+          bld(kind, x, y, yaw, rand()); claim(x, y, rad); n++; }
+        if (rand() < .6) { const x = cx + (rand() - .5) * R * .6, y = cy + (rand() - .5) * R * .6; if (free(x, y, 4) && offRoad('well', x, y, 0)) { bld('well', x, y, rand() * 6.283, rand()); claim(x, y, 4); } }
       } else if (t === 'h') {
-        put('tentSmall', cx - R * .3, cy - R * .1, 14, a0, rand());                       // barn / farmhouse stand-in
-        for (let k = 0; k < 2; k++) put('rows', cx + R * (.18 + k * .36), cy + R * (.2 - k * .1), 1.25, 0, rand());
-        put('logsBig', cx - R * .55, cy + R * .45, 8, rand() * 6.283, rand());
-        put('stump', cx + R * .05, cy - R * .5, 5, rand() * 6.283, rand());
-      } else if (t === 'x') {                                                                // earthwork: two courses of logs round the star + tents inside
-        const N = 12; for (let k = 0; k < N; k++) { const a = k / N * 6.283 + .26, d = R * .6;
-          for (let lay = 0; lay < 2; lay++) out.push({ kind: 'log', x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d * .92, lift: lay * 4.2, yaw: -(a + 1.5708), pitch: 0, rnd: rand(), sx: 5.2, sy: 5.2, sz: 5.2 }); }
-        put('tent', cx - R * .15, cy - R * .12, 11, a0, rand()); put('tentSmall', cx + R * .16, cy + R * .14, 9, a0 + 1, rand()); put('sign', cx, cy + R * .3, 10, 0, rand());
+        const rd = roadDir(M, c, r); let [fx, fy] = rd ? [-rd[1], rd[0]] : towardSet(M, c, r, (a, b) => onRoad(M, a, b)); if (!fx && !fy) [fx, fy] = [0, 1];
+        const hx = cx + fx * R * .18, hy = cy + fy * R * .18; bld('farmhouse', hx, hy, front(fx, fy), rand()); claim(hx, hy, foot('farmhouse'));
+        const bx = cx - fx * R * .42 + fy * R * .2, by = cy - fy * R * .42 - fx * R * .2; bld('barn', bx, by, front(fx, fy) + (rand() < .5 ? 1.5708 : 0), rand()); claim(bx, by, foot('barn'));
+        for (const s of [1, -1]) { const x = cx + fy * s * R * .55 - fx * R * .1, y = cy - fx * s * R * .55 - fy * R * .1; if (free(x, y, 5)) { bld('haystack', x, y, rand() * 6.283, rand()); claim(x, y, 5); } }
+        { const x = cx + fy * R * .32 + fx * R * .45, y = cy - fx * R * .32 + fy * R * .45; if (free(x, y, 3)) bld('well', x, y, rand() * 6.283, rand()); }
+        { const x = cx - fy * R * .5 + fx * R * .3, y = cy + fx * R * .5 + fy * R * .3; if (free(x, y, 6)) { bld('shed', x, y, front(fx, fy), rand()); claim(x, y, 6); } }
+      } else if (t === 'x') {
+        const N = 7, rad = R * .56, seg = 2 * Math.PI * rad / N, sl = seg / (10 * K) * 1.12;   // earthwork sections overlap a little at the corners
+        for (let k = 0; k < N; k++) { const a = k / N * 6.283 + a0, fx = Math.cos(a), fy = Math.sin(a);
+          out.push({ kind: 'earthwork', x: cx + fx * rad, y: cy + fy * rad * .95, lift: -.3, yaw: front(fx, fy), pitch: 0, rnd: rand(), sx: K * sl, sy: K, sz: K }); }
+        for (const [dx, dy] of [[-.16, -.1], [.12, -.16], [.02, .16]]) bld('wedge_tent', cx + dx * R, cy + dy * R, a0 + rand() * .4, rand());
       } else if (t === 'k') {
-        for (let k = 0; k < 3; k++) put(k === 1 ? 'rockC' : 'rockA', cx + (rand() - .5) * R * 1.1, cy + (rand() - .5) * R * .9, 8 + rand() * 6, rand() * 6.283, rand(), -1);
+        for (let k = 0; k < 3; k++) kit(k === 1 ? 'rockC' : 'rockA', cx + (rand() - .5) * R * 1.1, cy + (rand() - .5) * R * .9, 8 + rand() * 6, rand() * 6.283, rand(), -1);
       } else if (t === 'b') {
-        const [dx, dy] = crossDir(M, c, r); out.push({ kind: 'bridge', x: cx, y: cy, lift: 2, yaw: Math.atan2(-dy, dx), pitch: 0, rnd: rand(), sx: R * 1.9, sy: R * .85, sz: 22 });
+        const [dx, dy] = crossDir(M, c, r); out.push({ kind: 'stone_bridge', x: cx, y: cy, lift: 0, yaw: side(dx, dy), pitch: 0, rnd: rand(), sx: K, sy: K, sz: K });
       } else if (t === 'd') {
-        const [dx, dy] = crossDir(M, c, r); out.push({ kind: 'stepRocks', x: cx, y: cy, lift: 1.2, yaw: Math.atan2(-dy, dx), pitch: 0, rnd: rand(), sx: R * 1.5, sy: R * 1.5, sz: R * .5 });
+        const [dx, dy] = crossDir(M, c, r); out.push({ kind: 'stepRocks', x: cx, y: cy, lift: 1.2, yaw: side(dx, dy), pitch: 0, rnd: rand(), sx: R * 1.5, sy: R * 1.5, sz: R * .5 });
       }
     }
     for (const [c, r, kind] of (M.structures || [])) {       // named structures listed in the map file
       if (!M.in(c, r)) continue;
-      const rand = CW.rng(c * 7919 + r * 104729 + 99), [cx, cy] = CW.center(c, r), [wx, wy] = towardWater(M, c, r), x = cx + wx * R * .4, y = cy + wy * R * .4, yaw = Math.atan2(-wy, wx);
-      if (kind === 'mill') {
-        put('platform', x, y, 1.9, yaw, rand(), -.5); put('tent', x, y, 17, yaw, rand(), 1.2);
-        put('logsBig', x - wy * R * .45 - wx * R * .15, y + wx * R * .45 - wy * R * .15, 8, rand() * 6.283, rand()); put('rockC', x + wx * R * .3 + wy * R * .3, y + wy * R * .3 - wx * R * .3, 5, rand() * 6.283, rand(), -1);
+      const rand = CW.rng(c * 7919 + r * 104729 + 99), [cx, cy] = CW.center(c, r);
+      if (kind === 'mill') {   // wheel (+X) toward the water; set back so the wheel just reaches the bank
+        let [wx, wy] = towardSet(M, c, r, (a, b) => WATER.has(M.ter(a, b))); if (!wx && !wy) [wx, wy] = [1, 0];
+        const x = cx + wx * R * .22, y = cy + wy * R * .22; bld('grist_mill', x, y, side(wx, wy), rand()); claim(x, y, foot('grist_mill'));
+        kit('logsBig', x - wy * R * .5 - wx * R * .2, y + wx * R * .5 - wy * R * .2, 8, rand() * 6.283, rand());
       }
     }
     return out;
@@ -65,10 +116,10 @@ CW.WorldStructures = (function () {
 
   // env: { scene, M, W3 }
   function build(env) {
-    const SM = CW.STRUCTMESH; if (!SM) throw new Error('struct_meshes.js missing');
+    const SM = CW.MODELS; if (!SM) throw new Error('models.js missing');
     dispose(); scene = env.scene; const list = place(env.M); list.W3 = env.W3;
     const fog = { uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
-    parts = CW.WorldEdges.instanced(scene, list, SM, Object.keys(SM), fog); return list.length;
+    parts = CW.WorldEdges.instanced(scene, list, SM, [...new Set(list.map(o => o.kind))], fog); return list.length;
   }
   function dispose() { parts.forEach(m => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); }); parts = []; }
   return { place, build, dispose };

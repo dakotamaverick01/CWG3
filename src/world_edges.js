@@ -4,7 +4,7 @@
 //  - brooks  : CW.WATER.streams (the meandered hex-edge chains; they come from M.edgeAt) -> mud bank + water ribbon.
 //  - fences  : M.edgeAt 'fence' -> Kenney rail fence, 2 pieces per hex edge, pitched to follow the slope.
 //  - walls   : M.edgeAt 'wall'  -> a row of 4 Kenney stones + a course of 3 flat stones on top, per hex edge.
-// Meshes: assets/art/edge_meshes.js (baked by tools/build_tree_meshes.py). Active only while CW.WORLD is on; with it off the painted versions are back.
+// Meshes: assets/art/models.js (baked by tools/bake_models.py). Active only while CW.WORLD is on; with it off the painted versions are back.
 CW.WorldEdges = (function () {
   const dec = (s, T) => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new T(u.buffer); };
   const lin = c => { c /= 255; return c <= .04045 ? c / 12.92 : Math.pow((c + .055) / 1.055, 2.4); };
@@ -95,7 +95,7 @@ CW.WorldEdges = (function () {
 
   // env: { scene, M, W3 (map px -> world), U (unused today) }
   function build(env) {
-    const { scene, M, W3 } = env, EM = CW.EDGEMESH; if (!EM) throw new Error('edge_meshes.js missing');
+    const { scene, M, W3 } = env, EM = CW.EDGEMESH; if (!EM) throw new Error('models.js missing');
     dispose(); const parts = [], stats = { roads: 0, brooks: 0, pieces: 0 };
     const fog = { uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
     const rmat = (tone, po) => new THREE.ShaderMaterial({ vertexShader: RVS, fragmentShader: RFS, uniforms: { ...fog, uTone: { value: new THREE.Vector3(...tone) } }, transparent: true, depthWrite: false,

@@ -56,9 +56,9 @@ Every output is a pure function of the inputs above. "Today" is what the code do
 - **Today (T4 done):** with `CW.WORLD` on, `src/world_edges.js` builds them from the map data. Roads: one smooth ribbon per `M.roads` path, draped on the terrain heights (continuous, so no break at hex borders). Brooks: bank + water ribbon along `CW.WATER.streams` (the hex-edge chains; still produced by the painted pass, T6 removes that dependency). Fences: Kenney rail fence, 2 pieces per hex edge, pitched with the slope. Walls: 4 Kenney stones + 3 capstones per hex edge. The painted pass skips these four (`objs.skipEdges`) but still makes every random call, so other props do not move. Buildings, crops, bridge, ford, labels stay painted. **Built by:** T4.
 
 ### 2e. Structures
-- **From:** hex letters `t`, `h`, `b`, `d`, `x`, `k` plus the map file's optional `structures:[[c,r,'mill']]` list (table at the bottom of this file).
-- **Output:** instanced Kenney Nature Kit pieces (`src/world_structures.js`, meshes in `assets/art/struct_meshes.js`). The kit has no houses, so towns, farms and the mill are stand-ins built from tents, logs, plank rows and a stone platform.
-- **Today (T5 done):** with `CW.WORLD` on the painted buildings, bridge, ford and fort outline are skipped (the painted pass still makes every random call, so other props stay put). Moving the `'mill'` entry in the map file moves the mill; deleting it removes it. **Built by:** T5.
+- **From:** hex letters `t`, `h`, `b`, `d`, `x`, `k` plus the map file's optional `structures:[[c,r,'mill']]` list (table in section 6).
+- **Output:** instanced models from `assets/art/models.js` (`src/world_structures.js`). Buildings are our own period models (`tools/gen_models.py`, see `docs/ASSET_PIPELINE.md`), drawn at 2.4 px per metre; rocks and ford stones are Kenney kit pieces.
+- **Today:** with `CW.WORLD` on the painted buildings, bridge, ford and fort outline are skipped. Moving the `'mill'` entry in the map file moves the mill. **Built by:** T5, upgraded by the asset pipeline (9 Oct).
 
 ## 3. Known Millbrook-only paths (must be gone by the end of the plan)
 
@@ -83,19 +83,19 @@ Every output is a pure function of the inputs above. "Today" is what the code do
 3. Assets are CC0 only and logged in `ASSET_CREDITS.md`.
 4. Living off freezes motion and never changes the layout.
 
-## 6. Structure placement table (T5)
+## 6. Structure placement table (asset pipeline, 9 Oct)
 
-| Trigger | Pieces (Kenney Nature Kit, CC0) | Rule |
+| Trigger | Models | Rule |
 |---|---|---|
-| hex `t` town | 3 tents (middle one open), campfire ring, 2 log piles, signpost | seeded per hex; tents on a ring round the centre |
-| hex `h` farm | small tent as barn, 2 ploughed double rows, big log pile, stump | seeded per hex |
-| hex `b` bridge | wooden bridge, 1.9 hex long | runs along the road through the hex; else across the river (perpendicular to water neighbours); else east-west |
-| hex `d` ford | river-rocks stepping stones | same direction rule as the bridge |
-| hex `x` fort | ring of 12 x 2 courses of logs (earthwork), 2 tents, signpost | seeded per hex |
-| hex `k` knoll | 3 large rocks | seeded per hex |
-| map field `structures:[[c,r,'mill']]` | stone platform, canvas-roofed hut, big log pile, rock | stands on the side of the hex that faces its water neighbours; hex comes only from the map file |
+| hex `t` town | church, store, farmhouse, brick_house, log_cabin, well | Each connected town: the hex nearest its middle gets the church (towns of 3+ hexes), the next one the store; other lots get houses (seeded). Up to 3 lots per hex: two each side of the road through the hex, fronts facing it, set back by half the building's depth; without a road, a row facing the nearest road (else the town's middle). A lot is skipped if any part of the footprint is within 10 px of any road or overlaps another building. |
+| hex `h` farm | farmhouse, barn, 2 haystacks, well, shed | farmhouse faces the road (or nearest road hex), barn behind it, the rest around; seeded |
+| hex `b` bridge | stone_bridge (34 m, three arches) | along the road through the hex; else across the river; else east-west |
+| hex `d` ford | stepRocks (Kenney river rocks) | same direction rule as the bridge |
+| hex `x` fort | 7 earthwork sections in a ring facing outward (stretched to close the ring), 3 wedge tents inside | seeded per hex |
+| hex `k` knoll | 3 Kenney rocks | seeded per hex |
+| map field `structures:[[c,r,'mill']]` | grist_mill (wheel side toward the water), log pile | hex comes only from the map file |
 
-Brooks (T4, reworked in T5): the end nearer the river is run on into the river bank so a brook never stops in open grass; the other end is a narrow faded spring. Width grows from spring to mouth and the banks carry scattered gravel (Kenney flat stone).
+Brooks: see 2b (water ribbon from `world_water.js`) and 2d (mud bank + gravel).
 
 ## 7. Motion: one switch (T7)
 Options > "Living landscape" is the only switch (default on; the slow-frame guard can turn it off for a session). It drives one shared uniform (`uLive`) that controls cloud shadows, wind in the wheat, river and brook flow (including the wake field), tree sway, and the slow haze colour cycle. Off = every one of them frozen at frame 0 with the layout unchanged (test: two renders 3 s apart are pixel-identical). Structures, roads, walls and fences never move. No effect is faster than the old ones: clouds drift about 9 map px/s, sway is under 1 rad/s, water flipbook 6 fps with cross-fade.

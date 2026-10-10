@@ -12,6 +12,7 @@
 - **Build outputs:** `assets/art/art.js`, `kit.js`, `scenery.js` are gitignored; a fresh cloud clone must run `python3 -I tools/intake.py && python3 -I tools/build_kit.py` (~1 min), then `git checkout -- assets && git clean -fdq assets`. Rebuilt art may differ slightly from John's Mac copy.
 - **Run, verify, commit, push:** use the `cwg3-run-and-verify` skill.
 - **Assets:** own, open-source or CC0 only; log every source in `ASSET_CREDITS.md`.
+- **3D models (9 Oct):** one pipeline: sources in `assets/models/src/`, list in `assets/models/MANIFEST.json`, bake with `python3 -I tools/bake_models.py` -> `assets/art/models.js` (committed). Our own buildings are code in `tools/gen_models.py`. Review everything in `tools/model_gallery.html`. Rules + shopping list: `docs/ASSET_PIPELINE.md`.
 - **John's rules:** short replies, explain new jargon, multiple-choice questions, read only needed files, screenshots once at the end, stop and ask after 2 failed fixes.
 
 ## Done
@@ -439,3 +440,9 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - New src/world_water.js: rivers and brooks come from the map file only (CW.WATER no longer read while CW.WORLD is on). Brooks use the river's own water shader (narrower, shallower, fade at the spring) and end in the river. world_edges.js keeps only the brook's mud bank + gravel.
 - T7: one Living switch already drove everything; Options label now says so; added R3.snap() test helper. Off = frozen (pixel-identical), on = slow drift.
 - Next: John decides about buildings / a broader 3D-asset plan (tents are stand-ins). T8 proof map still open.
+
+## 2026-10-09 — 3D asset pipeline + period buildings (Opus), on main
+- New pipeline: `assets/models/` (src/, MANIFEST.json, palette.json, inbox/), `tools/bake_models.py` (replaces build_tree_meshes.py), one output `assets/art/models.js` (CW.MODELS; old CW.TREEMESH/EDGEMESH/STRUCTMESH names are aliases). Kenney meshes are the same triangles as before.
+- 13 own period models written as code (`tools/modelkit.py` + `tools/gen_models.py`): farmhouse, barn, church, store, brick house, log cabin, grist mill with wheel, 3-arch stone bridge, earthwork, wedge tent, haystack, well, shed. Tents/camp stand-ins gone from towns and farms.
+- `src/world_structures.js` rewritten: towns face their roads (church + store per town), farms, mill, stone bridge, earthwork ring fort.
+- Next: John reviews looks in the gallery and in game; he may hunt CC0 models per the shopping list (`docs/ASSET_PIPELINE.md`).

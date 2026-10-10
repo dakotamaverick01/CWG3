@@ -5,3 +5,5 @@ assets/art/art.js
 assets/art/kit.js
 assets/art/scenery.js
 assets/art/review_*.jpg
+assets/models/inbox/*
+!assets/models/inbox/README.md
