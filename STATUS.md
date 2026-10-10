@@ -446,3 +446,4 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - 13 own period models written as code (`tools/modelkit.py` + `tools/gen_models.py`): farmhouse, barn, church, store, brick house, log cabin, grist mill with wheel, 3-arch stone bridge, earthwork, wedge tent, haystack, well, shed. Tents/camp stand-ins gone from towns and farms.
 - `src/world_structures.js` rewritten: towns face their roads (church + store per town), farms, mill, stone bridge, earthwork ring fort.
 - Next: John reviews looks in the gallery and in game; he may hunt CC0 models per the shopping list (`docs/ASSET_PIPELINE.md`).
+- Textures without image files (same day): per-material surface patterns drawn by the shader (clapboard, brick, stone, shingles, tin, boards, planks, logs, earth, hay, canvas, dirt), anti-aliased; sky/ground fill light; soft sun shadows under buildings. Gallery now uses the game's own shader. Shots: docs/shots/tex_*.jpg.

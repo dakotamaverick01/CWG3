@@ -97,6 +97,12 @@ def load(path):
     return np.vstack(P), np.vstack(N), C, np.concatenate(I)
 
 
+def pattern_of(mat, spec, patterns):
+    """shader surface pattern id for this material (palette '_patterns'); 0 = plain"""
+    name = mat.get('name', ''); want = spec.get('colors', {}).get(name, name)
+    return patterns.get(want, 0) if isinstance(want, str) else 0
+
+
 def colour_of(mat, spec, palette):
     name = mat.get('name', '')
     want = spec.get('colors', {}).get(name, name)
@@ -111,7 +117,7 @@ def b64(a):
     return base64.b64encode(np.ascontiguousarray(a).tobytes()).decode()
 
 
-def bake_one(key, spec, palette):
+def bake_one(key, spec, palette, patterns):
     p, n, mats, idx = load(os.path.join(MDIR, 'src', spec['src']))
     lo, hi = p.min(0), p.max(0); norm = spec.get('norm', 'meters')
     if norm in ('height', 'length'):
@@ -126,19 +132,20 @@ def bake_one(key, spec, palette):
         tri = idx.reshape(-1, 3); jit = 1 + (rng.random(len(tri)) - .5) * .08                            # +-4% per face
         f = np.ones(len(p)); f[tri[:, 0]] = jit; f[tri[:, 1]] = jit; f[tri[:, 2]] = jit; col *= f[:, None]
     col = (np.clip(col, 0, 1) * 255).round().astype(np.uint8)
+    kk = np.array([pattern_of(m, spec, patterns) for m in mats], dtype=np.uint8)
     assert len(p) < 65536, f'{key}: too many vertices ({len(p)}) for 16-bit indices'
     W, Hh, D = (hi - lo) / ref
     return {'src': os.path.basename(spec['src']).rsplit('.', 1)[0], 'n': len(p), 'tris': len(idx) // 3, 'norm': norm,
             'w': round(float(max(W, D)), 3), 'h': round(float(Hh), 3), 'd': round(float(D), 3), 'x': round(float(W), 3),
-            'p': b64(p.astype(np.float32)), 'nm': b64(n.astype(np.float32)), 'c': b64(col), 'i': b64(idx.astype(np.uint16))}
+            'p': b64(p.astype(np.float32)), 'nm': b64(n.astype(np.float32)), 'c': b64(col), 'i': b64(idx.astype(np.uint16)), **({'k': b64(kk)} if kk.any() else {})}
 
 
 def main():
     man = json.load(open(os.path.join(MDIR, 'MANIFEST.json')))
-    palette = {k: v for k, v in json.load(open(os.path.join(MDIR, 'palette.json'))).items() if not k.startswith('_')}
+    pj = json.load(open(os.path.join(MDIR, 'palette.json'))); palette = {k: v for k, v in pj.items() if not k.startswith('_')}; patterns = pj.get('_patterns', {})
     out, total = {}, 0
     for key, spec in man['models'].items():
-        out[key] = bake_one(key, spec, palette); total += out[key]['tris']
+        out[key] = bake_one(key, spec, palette, patterns); total += out[key]['tris']
         print(f"{key:13s} {spec['src']:32s} {out[key]['norm']:6s} tris {out[key]['tris']:5d}  w/h/d {out[key]['w']} {out[key]['h']} {out[key]['d']}")
     dst = os.path.join(ROOT, 'assets', 'art', 'models.js')
     with open(dst, 'w') as f:

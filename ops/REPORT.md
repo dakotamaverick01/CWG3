@@ -23,5 +23,10 @@ docs/shots/assets_gallery.png, assets_town.png, assets_farm.png, assets_bridge_m
 2. Store facade faces the main road, so from the default camera you see its back. OK?
 3. Which next: more generated pieces (worm fence, covered bridge, wagons, cemetery) or John's found models first?
 
+## Addendum (same evening): textures and shaders
+- Shader-drawn surface patterns per palette colour (no image files): clapboard, brick, stone, shingles, tin, board-and-batten, planks, logs, earth, hay, canvas, dirt; anti-aliased, fade when zoomed out.
+- Buildings: sky/ground fill light, weathering, per-building tint, soft sun shadows. Fences/walls/trees unchanged.
+- Evidence: docs/shots/tex_gallery_close.jpg, tex_town_close.jpg, tex_town.jpg, tex_bridge_mill.jpg.
+
 ## Suggested next brief (one line)
 John reviews gallery + in-game; then generate the next batch or vet his finds.

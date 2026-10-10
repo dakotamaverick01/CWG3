@@ -23,6 +23,16 @@ matches the palette, and it costs nothing. The `.glb` files also open in Blender
 The game places models from the map data in `src/world_structures.js` (towns, farms, bridge, fort, mill) and
 `src/world_edges.js` / `src/world_trees.js` (fences, walls, trees). Our models are in metres and drawn at 2.4 px per metre.
 
+## Surface patterns and shadows (no texture files)
+
+Each palette colour has a **pattern number** (`_patterns` in `assets/models/palette.json`): 1 clapboard, 2 brick, 3 stone blocks,
+4 shingles, 5 tin roof, 6 board-and-batten, 7 planks, 8 log grain, 9 earth/grass, 10 hay, 11 canvas, 12 dirt road (0 = plain).
+The baker stores that number per vertex; the shader in `src/world_edges.js` (IFS) draws the pattern from the model's own
+coordinates in metres, so there are no image files and it works by double-click. Lines are anti-aliased and fade out when
+zoomed far out, so nothing shimmers. Buildings also get sky/ground fill light, big weathering patches, a per-building tint, and
+a soft sun shadow on the ground (footprint swept away from the low western sun, `src/world_structures.js`).
+To give a new colour a pattern, add it to `_patterns` and re-bake. To change a pattern's look, edit its line in `pattern()`.
+
 ## Rules for every model
 
 | Rule | Why |

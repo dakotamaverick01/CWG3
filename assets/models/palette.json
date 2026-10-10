@@ -1,34 +1,188 @@
 {
   "_about": "House palette for every 3D model (sRGB 0-255). Models only name their materials; colours live here, so editing one line recolours every building that uses it. Used by tools/bake_models.py.",
-  "clapboard":   [222, 214, 192],
-  "clapboardGrey": [158, 152, 140],
-  "facade":      [196, 182, 150],
-  "trim":        [236, 230, 214],
-  "window":      [40, 46, 52],
-  "door":        [84, 58, 38],
-  "roofShingle": [88, 78, 68],
-  "roofWood":    [112, 104, 94],
-  "roofTin":     [126, 126, 122],
-  "brick":       [146, 74, 56],
-  "brickDark":   [112, 58, 44],
-  "stone":       [150, 142, 128],
-  "stoneDark":   [112, 106, 96],
-  "stoneLight":  [172, 164, 150],
-  "barnRed":     [134, 56, 42],
-  "barnDoor":    [108, 44, 34],
-  "wood":        [128, 96, 62],
-  "woodDark":    [86, 62, 42],
-  "woodGrey":    [134, 126, 112],
-  "log":         [112, 86, 60],
-  "logEnd":      [176, 144, 104],
-  "earth":       [128, 102, 70],
-  "earthDark":   [98, 78, 54],
-  "grassDry":    [118, 120, 68],
-  "hay":         [200, 174, 98],
-  "hayDark":     [164, 138, 74],
-  "canvas":      [206, 198, 174],
-  "canvasDark":  [150, 142, 120],
-  "water":       [40, 58, 62],
-  "roadDirt":    [150, 124, 88],
-  "iron":        [62, 62, 64]
+  "clapboard": [
+    222,
+    214,
+    192
+  ],
+  "clapboardGrey": [
+    158,
+    152,
+    140
+  ],
+  "facade": [
+    196,
+    182,
+    150
+  ],
+  "trim": [
+    236,
+    230,
+    214
+  ],
+  "window": [
+    40,
+    46,
+    52
+  ],
+  "door": [
+    84,
+    58,
+    38
+  ],
+  "roofShingle": [
+    88,
+    78,
+    68
+  ],
+  "roofWood": [
+    112,
+    104,
+    94
+  ],
+  "roofTin": [
+    126,
+    126,
+    122
+  ],
+  "brick": [
+    146,
+    74,
+    56
+  ],
+  "brickDark": [
+    112,
+    58,
+    44
+  ],
+  "stone": [
+    150,
+    142,
+    128
+  ],
+  "stoneDark": [
+    112,
+    106,
+    96
+  ],
+  "stoneLight": [
+    172,
+    164,
+    150
+  ],
+  "barnRed": [
+    134,
+    56,
+    42
+  ],
+  "barnDoor": [
+    108,
+    44,
+    34
+  ],
+  "wood": [
+    128,
+    96,
+    62
+  ],
+  "woodDark": [
+    86,
+    62,
+    42
+  ],
+  "woodGrey": [
+    134,
+    126,
+    112
+  ],
+  "log": [
+    112,
+    86,
+    60
+  ],
+  "logEnd": [
+    176,
+    144,
+    104
+  ],
+  "earth": [
+    128,
+    102,
+    70
+  ],
+  "earthDark": [
+    98,
+    78,
+    54
+  ],
+  "grassDry": [
+    118,
+    120,
+    68
+  ],
+  "hay": [
+    200,
+    174,
+    98
+  ],
+  "hayDark": [
+    164,
+    138,
+    74
+  ],
+  "canvas": [
+    206,
+    198,
+    174
+  ],
+  "canvasDark": [
+    150,
+    142,
+    120
+  ],
+  "water": [
+    40,
+    58,
+    62
+  ],
+  "roadDirt": [
+    150,
+    124,
+    88
+  ],
+  "iron": [
+    62,
+    62,
+    64
+  ],
+  "_patterns_about": "Surface pattern drawn by the shader for each palette colour (world_edges.js PATTERN): 0 none, 1 clapboard, 2 brick, 3 stone blocks, 4 shingles, 5 tin roof, 6 board-and-batten, 7 planks, 8 log grain, 9 earth/grass, 10 hay, 11 canvas, 12 dirt road.",
+  "_patterns": {
+    "clapboard": 1,
+    "clapboardGrey": 1,
+    "facade": 1,
+    "brick": 2,
+    "brickDark": 2,
+    "stone": 3,
+    "stoneDark": 3,
+    "stoneLight": 3,
+    "roofShingle": 4,
+    "roofWood": 4,
+    "roofTin": 5,
+    "barnRed": 6,
+    "barnDoor": 6,
+    "woodGrey": 6,
+    "wood": 7,
+    "woodDark": 7,
+    "door": 7,
+    "log": 8,
+    "logEnd": 0,
+    "earth": 9,
+    "earthDark": 9,
+    "grassDry": 9,
+    "hay": 10,
+    "hayDark": 10,
+    "canvas": 11,
+    "canvasDark": 11,
+    "roadDirt": 12
+  }
 }

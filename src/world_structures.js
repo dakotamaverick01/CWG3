@@ -114,12 +114,39 @@ CW.WorldStructures = (function () {
     return out;
   }
 
+  // soft sun shadows: each building's footprint swept away from the low western sun (the same sun as every other light in the game)
+  const SVS = `attribute vec3 aBase; attribute vec4 aBox; varying vec2 vQ; varying vec4 vB; varying vec2 vS;
+    void main() {
+      float cy = cos(aBox.x), sy = sin(aBox.x); vec2 sw = vec2(0.5, -0.25) / 0.75 * aBox.w * 1.35;            // ground shadow vector (world x, z) for sun (-0.5, 0.75, 0.25), stretched a little: late-afternoon light
+      vec2 sl = vec2(sw.x * cy - sw.y * sy, sw.x * sy + sw.y * cy);                                       // same vector in the building's own axes
+      vec2 e = aBox.yz + 3.0, lo = min(-e, -e + sl), hi = max(e, e + sl), q = mix(lo, hi, position.xy + 0.5);
+      vQ = q; vB = vec4(aBox.yz, 0.0, 0.0); vS = sl;
+      vec3 wp = aBase + vec3(q.x * cy + q.y * sy, 1.1, -q.x * sy + q.y * cy);
+      gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0); }`;
+  const SFS = `varying vec2 vQ; varying vec4 vB; varying vec2 vS;
+    float box(vec2 p) { vec2 d = abs(p) - vB.xy; return 1.0 - smoothstep(-2.5, 2.5, max(d.x, d.y)); }
+    void main() { float a = 0.0; for (int k = 0; k <= 6; k++) { float t = float(k) / 6.0; a = max(a, box(vQ - vS * t) * (1.0 - 0.3 * t)); }
+      gl_FragColor = vec4(0.08, 0.07, 0.12, a * 0.55); }`;
+  const NO_SHADOW = new Set(['stone_bridge', 'earthwork', 'stepRocks', 'rockA', 'rockC', 'logsBig']);
+  function shadows(list) {
+    const MD = CW.MODELS, items = list.filter(o => MD[o.kind] && MD[o.kind].norm === 'meters' && !NO_SHADOW.has(o.kind)), n = items.length; if (!n) return null;
+    const base = new Float32Array(n * 3), box = new Float32Array(n * 4);
+    items.forEach((o, i) => { const m = MD[o.kind], b = list.W3(o.x, o.y); base.set([b.x, b.y + o.lift, b.z], i * 3);
+      box.set([o.yaw, (m.x || m.w) * o.sx * .5, m.d * o.sz * .5, Math.min(m.h, 12) * o.sy], i * 4); });
+    const g = new THREE.InstancedBufferGeometry(), q = new THREE.PlaneGeometry(1, 1); g.index = q.index; g.setAttribute('position', q.attributes.position);
+    g.setAttribute('aBase', new THREE.InstancedBufferAttribute(base, 3)); g.setAttribute('aBox', new THREE.InstancedBufferAttribute(box, 4)); g.instanceCount = n;
+    const me = new THREE.Mesh(g, new THREE.ShaderMaterial({ vertexShader: SVS, fragmentShader: SFS, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })); me.frustumCulled = false; me.renderOrder = 1; return me;
+  }
+
   // env: { scene, M, W3 }
   function build(env) {
     const SM = CW.MODELS; if (!SM) throw new Error('models.js missing');
     dispose(); scene = env.scene; const list = place(env.M); list.W3 = env.W3;
     const fog = { uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
-    parts = CW.WorldEdges.instanced(scene, list, SM, [...new Set(list.map(o => o.kind))], fog); return list.length;
+    parts = CW.WorldEdges.instanced(scene, list, SM, [...new Set(list.map(o => o.kind))], fog);
+    const sh = shadows(list); if (sh) { scene.add(sh); parts.push(sh); }
+    return list.length;
   }
   function dispose() { parts.forEach(m => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); }); parts = []; }
   return { place, build, dispose };

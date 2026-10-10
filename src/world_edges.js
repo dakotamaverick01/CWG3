@@ -47,16 +47,63 @@ CW.WorldEdges = (function () {
     }`;
 
   // ---------- instanced pieces (fence, stones) ----------
-  const IVS = `attribute vec3 aBase, aRot, aSc, color; varying vec3 vCol; varying float vDist;
+  // Pattern 0 (fences, kit stones, trees' kin) keeps the original flat look. Patterns 1-12 (our buildings, see palette.json '_patterns')
+  // are drawn here from the model's own coordinates in metres, so no texture files are needed: clapboard, brick, stone blocks,
+  // shingles, tin, board-and-batten, planks, log grain, earth, hay, canvas, dirt. Every line is anti-aliased and fades out
+  // when it would be thinner than ~2 screen pixels (zoomed out), so nothing shimmers. Lighting: low western sun + sky/ground fill.
+  const IVS = `attribute vec3 aBase, aRot, aSc, color; attribute float aK; varying vec3 vCol, vL, vNl, vN, vW; varying float vDist, vK, vR;
     void main() {
       float cy = cos(aRot.x), sy = sin(aRot.x), cp = cos(aRot.y), sp = sin(aRot.y);
       vec3 l = position * aSc; vec3 p = vec3(l.x * cp - l.y * sp, l.x * sp + l.y * cp, l.z); p = vec3(p.x * cy + p.z * sy, p.y, -p.x * sy + p.z * cy);
       vec3 n = vec3(normal.x * cp - normal.y * sp, normal.x * sp + normal.y * cp, normal.z); n = vec3(n.x * cy + n.z * sy, n.y, -n.x * sy + n.z * cy);
       float lam = max(dot(normalize(n), normalize(vec3(-0.5, 0.75, 0.25))), 0.0);   // same low western sun as the trees
       vCol = color * (0.52 + 0.62 * lam) * (0.9 + 0.2 * aRot.z) * vec3(1.04, 0.99, 0.88);
+      vL = position; vNl = normal; vN = n; vK = aK; vR = aRot.z; vW = aBase + p;
       vec4 mv = viewMatrix * vec4(aBase + p, 1.0); vDist = -mv.z; gl_Position = projectionMatrix * mv; }`;
-  const IFS = `uniform vec3 uFog; uniform vec2 uFogR; varying vec3 vCol; varying float vDist;
-    void main() { gl_FragColor = vec4(mix(vCol, uFog, smoothstep(uFogR.x, uFogR.y, vDist)), 1.0);
+  const IFS = `uniform vec3 uFog; uniform vec2 uFogR; varying vec3 vCol, vL, vNl, vN, vW; varying float vDist, vK, vR;
+    float h1(float n) { return fract(sin(n * 91.73) * 43758.5453); }
+    float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float n2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y); }
+    float line(float c, float w) { float f = fract(c), d = min(f, 1.0 - f), a = fwidth(c) + 1e-4; return 1.0 - smoothstep(w - a, w + a, d); }   // 1 on a joint
+    float fade(vec2 c) { vec2 f = fwidth(c); return 1.0 - smoothstep(0.22, 0.55, max(f.x, f.y)); }                                          // 0 when a cell < ~2 px
+    vec3 pattern(float k, vec3 L, vec3 Nl) {
+      vec2 t = normalize(vec2(-Nl.z, Nl.x) + 1e-5); float u = dot(L.xz, t), v = L.y;                      // wall-plane coordinates (metres)
+      if (abs(Nl.y) > 0.92) { u = L.x; v = L.z; }                                                        // flat tops/floors
+      if (k < 1.5) { float c = v / 0.30; float m = mix(0.80, 1.04, smoothstep(0.0, 0.45, fract(c))) * (0.97 + 0.06 * h1(floor(c)));   // clapboard
+        return vec3(mix(0.96, m, fade(vec2(c)))); }
+      if (k < 2.5) { float r = v / 0.24, x = u / 0.50 + 0.5 * mod(floor(r), 2.0); float mo = max(line(r, 0.08), line(x, 0.05));        // brick
+        vec3 b = vec3(0.88 + 0.22 * h2(vec2(floor(x), floor(r)))) * vec3(1.0, 0.97, 0.95), c = mix(b, vec3(1.42, 1.36, 1.24), mo * 0.85);
+        return mix(vec3(1.0), c, fade(vec2(r, x))); }
+      if (k < 3.5) { float r = v / 0.50, x = u / 0.85 + h1(floor(r) + 3.0); float jo = max(line(r, 0.06), line(x, 0.05));              // stone blocks
+        float m = mix(0.84 + 0.30 * h2(vec2(floor(x), floor(r))), 0.62, jo); return vec3(mix(0.98, m, fade(vec2(r, x)))); }
+      if (k < 4.5) { float r = v / 0.32, x = u / 0.38 + 0.5 * mod(floor(r), 2.0);                                                     // shingles
+        float m = mix(0.70, 1.02, smoothstep(0.0, 0.35, fract(r))) * (0.86 + 0.26 * h2(vec2(floor(x), floor(r)))) * (1.0 - 0.25 * line(x, 0.04));
+        return vec3(mix(0.93, m, fade(vec2(r, x)))); }
+      if (k < 5.5) { float x = u / 0.55; float m = 1.0 + 0.22 * line(x, 0.06) - 0.10 * line(x + 0.1, 0.05);                            // tin roof seams + rust
+        vec3 c = vec3(m) * mix(vec3(1.0), vec3(1.10, 0.92, 0.80), smoothstep(0.55, 0.9, n2(L.xz * 0.9 + L.y)) * 0.6); return mix(vec3(1.0), c, fade(vec2(x))); }
+      if (k < 6.5) { float x = u / 0.50; float m = (0.88 + 0.18 * h1(floor(x))) * (1.0 + 0.16 * line(x, 0.07)) * (1.0 - 0.14 * line(x + 0.12, 0.04));   // board and batten
+        m *= 0.94 + 0.10 * n2(vec2(u * 2.0, v * 0.35)); return vec3(mix(0.97, m, fade(vec2(x)))); }
+      if (k < 7.5) { float x = u / 0.28; float m = (0.90 + 0.16 * h1(floor(x))) * (1.0 - 0.28 * line(x, 0.05)); return vec3(mix(0.97, m, fade(vec2(x)))); }   // planks
+      if (k < 8.5) return vec3(0.86 + 0.20 * n2(vec2((L.x + L.z) * 0.7, L.y * 9.0)));                                                      // log grain
+      if (k < 9.5) return vec3(0.82 + 0.30 * n2(L.xz * 0.45) + 0.08 * n2(L.xz * 2.3));                                                     // earth / grass
+      if (k < 10.5) return vec3(0.82 + 0.28 * n2(vec2(atan(L.z, L.x) * 6.0, L.y * 1.2)));                                                   // hay
+      if (k < 11.5) return vec3((0.96 + 0.06 * n2(L.xy * 1.7)) * (1.0 - 0.12 * line(u / 0.9, 0.03)));                                     // canvas seams
+      return vec3(0.86 + 0.24 * n2(L.xz * 0.6) + 0.06 * n2(L.xz * 3.0));                                                                    // dirt road
+    }
+    void main() {
+      vec3 col = vCol;
+      if (vK > 0.5) {
+        vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N;
+        vec3 S = normalize(vec3(-0.5, 0.75, 0.25)), V = normalize(cameraPosition - vW);
+        float lam = max(dot(N, S), 0.0);
+        vec3 hemi = mix(vec3(0.40, 0.37, 0.32), vec3(0.50, 0.53, 0.58), N.y * 0.5 + 0.5);                   // warm ground bounce .. cool sky
+        vec3 base = vCol / max((0.52 + 0.62 * max(dot(N, S), 0.0)) * (0.9 + 0.2 * vR) * vec3(1.04, 0.99, 0.88), vec3(0.05));   // undo the vertex light, keep colour + AO
+        base *= pattern(vK, vL, normalize(vNl)) * (0.93 + 0.12 * n2(vW.xz * 0.04)) * (0.92 + 0.16 * vR);   // pattern, big weathering patches, per-building tint
+        col = base * (hemi + 0.68 * lam * vec3(1.06, 0.98, 0.84));
+        if (vK > 4.5 && vK < 5.5) col += vec3(0.20, 0.19, 0.17) * pow(max(dot(reflect(-S, N), V), 0.0), 18.0);   // tin glints
+      }
+      gl_FragColor = vec4(mix(col, uFog, smoothstep(uFogR.x, uFogR.y, vDist)), 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`;
@@ -87,6 +134,7 @@ CW.WorldEdges = (function () {
       const g = new THREE.InstancedBufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(dec(m.p, Float32Array), 3)); g.setAttribute('normal', new THREE.BufferAttribute(dec(m.nm, Float32Array), 3));
       g.setAttribute('color', new THREE.BufferAttribute(dec(m.c, Uint8Array), 3, true)); g.setIndex(new THREE.BufferAttribute(dec(m.i, Uint16Array), 1));
+      g.setAttribute('aK', new THREE.BufferAttribute(m.k ? new Float32Array(dec(m.k, Uint8Array)) : new Float32Array(m.n), 1));   // surface pattern id per vertex
       g.setAttribute('aBase', new THREE.InstancedBufferAttribute(base, 3)); g.setAttribute('aRot', new THREE.InstancedBufferAttribute(rot, 3)); g.setAttribute('aSc', new THREE.InstancedBufferAttribute(sc, 3)); g.instanceCount = n;
       const me = new THREE.Mesh(g, new THREE.ShaderMaterial({ vertexShader: IVS, fragmentShader: IFS, uniforms: { ...fog }, side: THREE.DoubleSide })); me.frustumCulled = false; me.renderOrder = 0;
       scene.add(me); out.push(me); }
