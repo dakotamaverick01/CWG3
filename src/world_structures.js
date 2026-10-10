@@ -46,7 +46,8 @@ CW.WorldStructures = (function () {
   function place(M) {
     const R = CW.R, MD = CW.MODELS || {}, out = [], taken = [];
     const kit = (kind, x, y, h, yaw, rnd, lift) => out.push({ kind, x, y, lift: lift || 0, yaw, pitch: 0, rnd, sx: h, sy: h, sz: h });
-    const bld = (kind, x, y, yaw, rnd, lift, k = K) => out.push({ kind, x, y, lift: lift || 0, yaw, pitch: 0, rnd, sx: k, sy: k, sz: k });
+    const bld = (kind, x, y, yaw, rnd, lift, k = K, j = 1) => { const q = (rnd * 7.31) % 1, kk = k * (1 + (q - .5) * .10 * j);   // every copy a little turned and sized
+      out.push({ kind, x, y, lift: lift || 0, yaw: yaw + (rnd - .5) * .12 * j, pitch: 0, rnd, sx: kk, sy: kk * (1 + ((rnd * 3.7) % 1 - .5) * .08 * j), sz: kk }); };
     const foot = kind => { const m = MD[kind]; return m ? Math.max(m.x || m.w, m.d) * K * .5 : 10; };
     const segs = []; for (const rd of M.roads) for (let i = 0; i < rd.p.length - 1; i++) segs.push([CW.center(...rd.p[i]), CW.center(...rd.p[i + 1])]);
     const roadDist = (x, y) => segs.reduce((m, [p, q]) => { const dx = q[0] - p[0], dy = q[1] - p[1], t = Math.max(0, Math.min(1, ((x - p[0]) * dx + (y - p[1]) * dy) / (dx * dx + dy * dy || 1)));
@@ -56,6 +57,19 @@ CW.WorldStructures = (function () {
       for (const u of [-1, 0, 1]) for (const v of [-1, 0, 1]) { const lx = u * hx, lz = v * hz; if (roadDist(x + lx * cx + lz * sx, y - lx * sx + lz * cx) < 10) return false; }   // footprint corners/edges clear of every road
       return true; };
     const claim = (x, y, rad) => taken.push([x, y, rad]);
+    // a lived-in yard around a house that faces (fx, fy): picket fence out front, shade tree, kitchen garden, privy, woodpile (each by chance)
+    const YARD_SKIP = new Set(['church', 'store', 'store_b']);
+    function yard(kind, x, y, fx, fy, rand) {
+      const m = MD[kind]; if (!m) return; const hd = m.d * K * .5, hw = (m.x || m.w) * K * .5, tx = -fy, ty = fx;
+      if (kind === 'store' || kind === 'store_b') { const bx = x + tx * (hw + 3) + fx * (hd - 2), by = y + ty * (hw + 3) + fy * (hd - 2); if (free(bx, by, 3)) { bld('barrels', bx, by, rand() * 6.283, rand()); claim(bx, by, 3); } return; }
+      if (YARD_SKIP.has(kind)) return;
+      if (rand() < .55) for (const sd of [-1, 1]) { const px = x + fx * (hd + 2.5) + tx * sd * (hw * .62), py = y + fy * (hd + 2.5) + ty * sd * (hw * .62);
+        if (offRoad('picket', px, py, front(fx, fy))) out.push({ kind: 'picket', x: px, y: py, lift: 0, yaw: front(fx, fy), pitch: 0, rnd: rand(), sx: hw * .13, sy: K * 1.7, sz: K }); }
+      if (rand() < .5) { const sd = rand() < .5 ? 1 : -1, px = x - fx * (hd + 6) + tx * sd * (hw * .6), py = y - fy * (hd + 6) + ty * sd * (hw * .6); if (free(px, py, 6)) { kit('broadleaf', px, py, 21 + rand() * 9, rand() * 6.283, rand()); claim(px, py, 5); } }
+      if (rand() < .4) { const px = x - fx * (hd + 9) - tx * (hw * .3), py = y - fy * (hd + 9) - ty * (hw * .3), yw = front(fx, fy); if (free(px, py, 7) && offRoad('garden', px, py, yw)) { bld('garden', px, py, yw, rand()); claim(px, py, 6); } }
+      if (rand() < .45) { const sd = rand() < .5 ? 1 : -1, px = x - fx * (hd + 4) + tx * sd * (hw + 4), py = y - fy * (hd + 4) + ty * sd * (hw + 4); if (free(px, py, 3) && offRoad('outhouse', px, py, 0)) { bld('outhouse', px, py, front(fx, fy) + Math.PI, rand()); claim(px, py, 3); } }
+      if (rand() < .4) { const sd = rand() < .5 ? 1 : -1, px = x + tx * sd * (hw + 3), py = y + ty * sd * (hw + 3); if (free(px, py, 3) && offRoad('outhouse', px, py, 0)) { kit('logsBig', px, py, 4.5 + rand() * 2, rand() * 6.283, rand()); claim(px, py, 3); } }
+    }
     const towns = groups(M, 't');
 
     for (const [c, r] of M.all) {
@@ -74,18 +88,25 @@ CW.WorldStructures = (function () {
         const kinds = [];
         if (g.size >= 3 && g.rank === 0) kinds.push('church');
         if (g.rank === (g.size >= 3 ? 1 : 0)) kinds.push('store');
-        while (kinds.length < 3) kinds.push(['farmhouse', 'brick_house', 'farmhouse', 'brick_house', 'log_cabin'][Math.floor(rand() * 5)]);
+        if (kinds[kinds.length - 1] === 'store' && rand() < .5) kinds[kinds.length - 1] = 'store_b';
+        const HOUSES = ['farmhouse', 'house_b', 'cottage', 'house_l', 'brick_house', 'brick_b', 'house_b', 'cottage', 'log_cabin'];
+        while (kinds.length < 3) { const k = HOUSES[Math.floor(rand() * HOUSES.length)]; if (!kinds.includes(k) || rand() < .25) kinds.push(k); }
         let n = 0;
         for (const lot of lots) { if (n >= kinds.length) break; const kind = kinds[n], m = MD[kind]; if (!m) { n++; continue; }
           const set = lot.back ? R * .05 : 11 + m.d * K * .5;                                  // set back from the road by half the building's depth
           const x = cx + lot.ax + lot.nx * set, y = cy + lot.ay + lot.ny * set, rad = foot(kind);
           const yaw = front(-lot.nx, -lot.ny); if (!free(x, y, rad) || !offRoad(kind, x, y, yaw)) continue;
-          bld(kind, x, y, yaw, rand()); claim(x, y, rad); n++; }
+          bld(kind, x, y, yaw, rand()); claim(x, y, rad); n++;
+          yard(kind, x, y, -lot.nx, -lot.ny, rand); }
         if (rand() < .6) { const x = cx + (rand() - .5) * R * .6, y = cy + (rand() - .5) * R * .6; if (free(x, y, 4) && offRoad('well', x, y, 0)) { bld('well', x, y, rand() * 6.283, rand()); claim(x, y, 4); } }
+        if (rd && rand() < .55) { const [ux, uy] = rd, sd = rand() < .5 ? 1 : -1, a = (rand() - .5) * R * .7, x = cx + ux * a - uy * sd * 8.5, y = cy + uy * a + ux * sd * 8.5;   // a wagon pulled up at the roadside
+          if (free(x, y, 5)) { bld(rand() < .5 ? 'wagon_covered' : 'wagon', x, y, side(ux, uy) + (rand() < .5 ? Math.PI : 0), rand()); claim(x, y, 5); } }
       } else if (t === 'h') {
         const rd = roadDir(M, c, r); let [fx, fy] = rd ? [-rd[1], rd[0]] : towardSet(M, c, r, (a, b) => onRoad(M, a, b)); if (!fx && !fy) [fx, fy] = [0, 1];
-        const hx = cx + fx * R * .18, hy = cy + fy * R * .18; bld('farmhouse', hx, hy, front(fx, fy), rand()); claim(hx, hy, foot('farmhouse'));
-        const bx = cx - fx * R * .42 + fy * R * .2, by = cy - fy * R * .42 - fx * R * .2; bld('barn', bx, by, front(fx, fy) + (rand() < .5 ? 1.5708 : 0), rand()); claim(bx, by, foot('barn'));
+        const hk = ['farmhouse', 'house_b', 'house_l', 'cottage'][Math.floor(rand() * 4)], bk = rand() < .5 ? 'barn' : 'barn_b';
+        const hx = cx + fx * R * .18, hy = cy + fy * R * .18; bld(hk, hx, hy, front(fx, fy), rand()); claim(hx, hy, foot(hk)); yard(hk, hx, hy, fx, fy, rand);
+        const bx = cx - fx * R * .42 + fy * R * .2, by = cy - fy * R * .42 - fx * R * .2; bld(bk, bx, by, front(fx, fy) + (rand() < .5 ? 1.5708 : 0), rand()); claim(bx, by, foot(bk));
+        { const x = bx + fy * R * .3, y = by - fx * R * .3; if (free(x, y, 5) && rand() < .6) { bld('wagon', x, y, rand() * 6.283, rand()); claim(x, y, 5); } }
         for (const s of [1, -1]) { const x = cx + fy * s * R * .55 - fx * R * .1, y = cy - fx * s * R * .55 - fy * R * .1; if (free(x, y, 5)) { bld('haystack', x, y, rand() * 6.283, rand()); claim(x, y, 5); } }
         { const x = cx + fy * R * .32 + fx * R * .45, y = cy - fx * R * .32 + fy * R * .45; if (free(x, y, 3)) bld('well', x, y, rand() * 6.283, rand()); }
         { const x = cx - fy * R * .5 + fx * R * .3, y = cy + fx * R * .5 + fy * R * .3; if (free(x, y, 6)) { bld('shed', x, y, front(fx, fy), rand()); claim(x, y, 6); } }
@@ -127,7 +148,7 @@ CW.WorldStructures = (function () {
     float box(vec2 p) { vec2 d = abs(p) - vB.xy; return 1.0 - smoothstep(-2.5, 2.5, max(d.x, d.y)); }
     void main() { float a = 0.0; for (int k = 0; k <= 6; k++) { float t = float(k) / 6.0; a = max(a, box(vQ - vS * t) * (1.0 - 0.3 * t)); }
       gl_FragColor = vec4(0.08, 0.07, 0.12, a * 0.55); }`;
-  const NO_SHADOW = new Set(['stone_bridge', 'earthwork', 'stepRocks', 'rockA', 'rockC', 'logsBig']);
+  const NO_SHADOW = new Set(['stone_bridge', 'earthwork', 'stepRocks', 'rockA', 'rockC', 'logsBig', 'picket', 'garden', 'barrels']);
   function shadows(list) {
     const MD = CW.MODELS, items = list.filter(o => MD[o.kind] && MD[o.kind].norm === 'meters' && !NO_SHADOW.has(o.kind)), n = items.length; if (!n) return null;
     const base = new Float32Array(n * 3), box = new Float32Array(n * 4);
@@ -139,13 +160,38 @@ CW.WorldStructures = (function () {
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })); me.frustumCulled = false; me.renderOrder = 1; return me;
   }
 
-  // env: { scene, M, W3 }
+  // chimney smoke: soft puffs rising from some chimneys and drifting east on the breeze. Runs on the shared Living clock (uT, uLive);
+  // with Living off the puffs stay where they are (still wisps), so nothing moves and nothing disappears.
+  const PVS = `attribute vec3 aBase; attribute vec2 aSeed; uniform float uT, uLive; varying float vA; varying vec2 vUV;
+    void main() {
+      float t = fract((uLive > 0.5 ? uT * 0.05 : 0.0) + aSeed.x);
+      vec3 c = aBase + vec3(t * t * 26.0 + sin(t * 6.0 + aSeed.y * 9.0) * 1.5, t * 30.0, -t * t * 9.0);
+      float size = 1.6 + t * 8.5; vec4 mv = viewMatrix * vec4(c, 1.0); mv.xy += position.xy * size;
+      vA = smoothstep(0.0, 0.10, t) * (1.0 - t) * (0.30 + 0.15 * aSeed.y); vUV = position.xy * 2.0;
+      gl_Position = projectionMatrix * mv; }`;
+  const PFS = `varying float vA; varying vec2 vUV;
+    void main() { float d = length(vUV); float a = vA * (1.0 - smoothstep(0.25, 1.0, d)); if (a < 0.004) discard; gl_FragColor = vec4(0.64, 0.64, 0.68, a); }`;
+  function smoke(list, U) {
+    const MD = CW.MODELS, pts = [];
+    for (const o of list) { const m = MD[o.kind]; if (!m || !m.smoke) continue;
+      m.smoke.forEach((a, i) => { if (((o.rnd * 9.7 + i * .37) % 1) > .55) return;                    // about half the chimneys are lit
+        const cy = Math.cos(o.yaw), sy = Math.sin(o.yaw), lx = a[0] * o.sx, lz = a[2] * o.sz; pts.push([o.x + lx * cy + lz * sy, o.y - lx * sy + lz * cy, o.lift + a[1] * o.sy, o.rnd + i]); }); }
+    if (!pts.length || !U) return null;
+    const P = 7, n = pts.length * P, base = new Float32Array(n * 3), seed = new Float32Array(n * 2);
+    pts.forEach(([x, y, h, r], i) => { const b = list.W3(x, y); for (let k = 0; k < P; k++) { base.set([b.x, b.y + h, b.z], (i * P + k) * 3); seed.set([k / P + (r * 3.1 % 1) * .13, (r * 7.7 + k * .29) % 1], (i * P + k) * 2); } });
+    const g = new THREE.InstancedBufferGeometry(), q = new THREE.PlaneGeometry(1, 1); g.index = q.index; g.setAttribute('position', q.attributes.position);
+    g.setAttribute('aBase', new THREE.InstancedBufferAttribute(base, 3)); g.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seed, 2)); g.instanceCount = n;
+    const me = new THREE.Mesh(g, new THREE.ShaderMaterial({ vertexShader: PVS, fragmentShader: PFS, uniforms: { uT: U.uT, uLive: U.uLive }, transparent: true, depthWrite: false })); me.frustumCulled = false; me.renderOrder = 3; return me;
+  }
+
+  // env: { scene, M, W3, U (shared Living uniforms) }
   function build(env) {
     const SM = CW.MODELS; if (!SM) throw new Error('models.js missing');
     dispose(); scene = env.scene; const list = place(env.M); list.W3 = env.W3;
     const fog = { uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
     parts = CW.WorldEdges.instanced(scene, list, SM, [...new Set(list.map(o => o.kind))], fog);
     const sh = shadows(list); if (sh) { scene.add(sh); parts.push(sh); }
+    const sm = smoke(list, env.U); if (sm) { scene.add(sm); parts.push(sm); }
     return list.length;
   }
   function dispose() { parts.forEach(m => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); }); parts = []; }

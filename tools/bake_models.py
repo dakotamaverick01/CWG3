@@ -94,12 +94,16 @@ def load(path):
                 P.append(p); N.append(nn); C.extend([mat] * len(p)); I.append(idx + base); base += len(p)
         for c in n.get('children', []): walk(c, m)
     for r in j['scenes'][j.get('scene', 0)]['nodes']: walk(r, np.eye(4))
-    return np.vstack(P), np.vstack(N), C, np.concatenate(I)
+    extras = {}
+    for n in j.get('nodes', []): extras.update(n.get('extras', {}))
+    return np.vstack(P), np.vstack(N), C, np.concatenate(I), extras
 
 
 def pattern_of(mat, spec, patterns):
     """shader surface pattern id for this material (palette '_patterns'); 0 = plain"""
-    name = mat.get('name', ''); want = spec.get('colors', {}).get(name, name)
+    name = mat.get('name', '')
+    if name in spec.get('patterns', {}): return spec['patterns'][name]
+    want = spec.get('colors', {}).get(name, name)
     return patterns.get(want, 0) if isinstance(want, str) else 0
 
 
@@ -118,7 +122,7 @@ def b64(a):
 
 
 def bake_one(key, spec, palette, patterns):
-    p, n, mats, idx = load(os.path.join(MDIR, 'src', spec['src']))
+    p, n, mats, idx, extras = load(os.path.join(MDIR, 'src', spec['src']))
     lo, hi = p.min(0), p.max(0); norm = spec.get('norm', 'meters')
     if norm in ('height', 'length'):
         ref = (hi[1] - lo[1]) if norm == 'height' else (hi[0] - lo[0])
@@ -137,7 +141,7 @@ def bake_one(key, spec, palette, patterns):
     W, Hh, D = (hi - lo) / ref
     return {'src': os.path.basename(spec['src']).rsplit('.', 1)[0], 'n': len(p), 'tris': len(idx) // 3, 'norm': norm,
             'w': round(float(max(W, D)), 3), 'h': round(float(Hh), 3), 'd': round(float(D), 3), 'x': round(float(W), 3),
-            'p': b64(p.astype(np.float32)), 'nm': b64(n.astype(np.float32)), 'c': b64(col), 'i': b64(idx.astype(np.uint16)), **({'k': b64(kk)} if kk.any() else {})}
+            'p': b64(p.astype(np.float32)), 'nm': b64(n.astype(np.float32)), 'c': b64(col), 'i': b64(idx.astype(np.uint16)), **({'k': b64(kk)} if kk.any() else {}), **({'smoke': extras['smoke']} if extras.get('smoke') and norm == 'meters' else {})}
 
 
 def main():

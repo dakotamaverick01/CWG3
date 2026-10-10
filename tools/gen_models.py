@@ -27,6 +27,7 @@ def foundation(m, W, D, h=.5, mat='stone'):
 def chimney(m, x, z, w, d, y0, y1, mat='brick'):
     m.box(mat, x - w / 2, y0, z - d / 2, x + w / 2, y1, z + d / 2, skip=('bottom',))
     m.box('stoneDark' if mat == 'stone' else 'brickDark', x - w / 2 - .06, y1 - .25, z - d / 2 - .06, x + w / 2 + .06, y1, z + d / 2 + .06, skip=('bottom',))
+    m.smoke_at(x, y1 + .1, z)
 
 
 def farmhouse():
@@ -119,7 +120,7 @@ def log_cabin():
     m.prism([(-D / 2, E), (D / 2, E), (0, Rg)], -W / 2, W / 2, 'woodDark')
     m.gable_roof(W, D, E, Rg, over=.45, mat='roofWood')
     m.door(-.8, 0, D / 2 + r, 1.0, 2.0, F, mat='door', trim='woodDark'); m.window(1.6, 1.5, D / 2 + r, .7, .7, F, trim='woodDark')
-    m.box('stone', W / 2 + .1, 0, -.9, W / 2 + 1.2, 2.2, .9, skip=('bottom',)); m.box('stone', W / 2 + .2, 2.2, -.55, W / 2 + .9, Rg + .7, .55, skip=('bottom',))
+    m.box('stone', W / 2 + .1, 0, -.9, W / 2 + 1.2, 2.2, .9, skip=('bottom',)); m.box('stone', W / 2 + .2, 2.2, -.55, W / 2 + .9, Rg + .7, .55, skip=('bottom',)); m.smoke_at(W / 2 + .55, Rg + .8, 0)
     return m
 
 
@@ -216,7 +217,170 @@ def shed():
     return m
 
 
-MODELS = {f.__name__: f for f in (farmhouse, barn, church, store, brick_house, log_cabin, grist_mill, stone_bridge, earthwork, wedge_tent, haystack, well, shed)}
+# ---------------------------------------------------------------- variants (second pass): more shapes so towns don't repeat
+def house_b():
+    """3-bay two-storey house, centre chimney, full-width porch, one-storey kitchen wing behind"""
+    m = Model('house_b'); W, D, E, Rg = 7.6, 6.0, 5.6, 7.9
+    foundation(m, W, D); m.house_body(W, D, E, Rg, 'clapboard'); m.gable_roof(W, D, E, Rg, mat='roofShingle')
+    for x in (-2.4, 2.4): m.window(x, 1.9, D / 2, .8, 1.4, F)
+    for x in (-2.4, 0, 2.4): m.window(x, 4.4, D / 2, .8, 1.2, F)
+    m.door(0, .5, D / 2, 1.0, 2.1, F); chimney(m, 0, 0, .9, .9, Rg - 1.2, Rg + 1.0)
+    for sx, n in ((-1, L), (1, Rt)): m.window(sx * W / 2, 1.9, 0, .8, 1.3, n); m.window(sx * W / 2, 4.4, 0, .8, 1.2, n)
+    m.box('wood', -W / 2, 0, D / 2, W / 2, .45, D / 2 + 2.2, skip=('bottom',))
+    for x in (-3.6, -1.2, 1.2, 3.6): m.box('trim', x - .08, .45, D / 2 + 1.95, x + .08, 2.9, D / 2 + 2.11)
+    m.slab('roofTin', (-W / 2 - .2, 3.3, D / 2 + .05), (W / 2 + .2, 3.3, D / 2 + .05), (W / 2 + .2, 2.8, D / 2 + 2.45), (-W / 2 - .2, 2.8, D / 2 + 2.45), .12)
+    with m.at(x=1.0, z=-D / 2 - 2.4):
+        m.box('stone', -2.3, 0, -2.5, 2.3, .4, 2.5, skip=('bottom',)); m.house_body(4.4, 4.8, 3.0, 4.9, 'clapboard', along='z'); m.gable_roof(4.4, 4.8, 3.0, 4.9, over=.25, mat='roofShingle', along='z')
+        m.window(-2.2, 1.6, 0, .7, 1.1, L); m.window(2.2, 1.6, .5, .7, 1.1, Rt); chimney(m, 0, -2.0, .7, .7, 3.8, 5.6)
+    return m
+
+
+def cottage():
+    """one-and-a-half storey cottage: low walls, steep roof, stone end chimney, door and two windows"""
+    m = Model('cottage'); W, D, E, Rg = 8.0, 5.6, 3.4, 6.7
+    foundation(m, W, D, .4); m.house_body(W, D, E, Rg, 'clapboard'); m.gable_roof(W, D, E, Rg, over=.4, mat='roofWood')
+    m.door(.2, .4, D / 2, .95, 2.0, F)
+    for x in (-2.4, 2.6): m.window(x, 1.7, D / 2, .8, 1.2, F)
+    for sx, n in ((-1, L), (1, Rt)): m.window(sx * W / 2, 4.5, 0, .6, .8, n)
+    m.window(0, 1.7, -D / 2, .8, 1.2, B)
+    m.box('stone', -W / 2 - 1.1, 0, -.8, -W / 2 + .05, 2.6, .8, skip=('bottom',)); chimney(m, -W / 2 - .55, 0, .7, 1.0, 2.6, Rg + .9, mat='stone')
+    m.box('stoneLight', -.6, 0, D / 2, 1.0, .4, D / 2 + .9, skip=('bottom',))
+    return m
+
+
+def house_l():
+    """L-shaped two-storey farmhouse: side-gable main block, gable-front wing, porch in the crook"""
+    m = Model('house_l'); W, D, E, Rg = 9.0, 5.8, 5.6, 7.9
+    foundation(m, W, D); m.house_body(W, D, E, Rg, 'clapboard'); m.gable_roof(W, D, E, Rg, mat='roofShingle')
+    with m.at(x=-2.4, z=D / 2 + 1.9):
+        m.box('stone', -2.3, 0, -2.0, 2.3, .5, 2.0, skip=('bottom',)); m.house_body(4.4, 4.0, 5.6, 7.7, 'clapboard', along='z'); m.gable_roof(4.4, 4.0, 5.6, 7.7, over=.3, mat='roofShingle', along='z')
+        m.window(-1.0, 1.9, 2.0, .8, 1.4, F); m.window(1.0, 1.9, 2.0, .8, 1.4, F); m.window(0, 4.4, 2.0, .8, 1.2, F); m.window(0, 6.3, 2.0, .5, .6, F, panes=False)
+    m.door(1.4, .5, D / 2, 1.0, 2.1, F); m.window(3.3, 1.9, D / 2, .8, 1.4, F); m.window(1.4, 4.4, D / 2, .8, 1.2, F); m.window(3.3, 4.4, D / 2, .8, 1.2, F)
+    m.box('wood', 0, 0, D / 2, W / 2, .45, D / 2 + 2.0, skip=('bottom',))
+    for x in (.3, 2.2, 4.3): m.box('trim', x - .08, .45, D / 2 + 1.75, x + .08, 2.9, D / 2 + 1.91)
+    m.slab('roofTin', (0, 3.3, D / 2 + .05), (W / 2 + .2, 3.3, D / 2 + .05), (W / 2 + .2, 2.85, D / 2 + 2.25), (0, 2.85, D / 2 + 2.25), .12)
+    chimney(m, 1.6, 0, .9, .9, Rg - 1.0, Rg + 1.0); chimney(m, W / 2 + .35, 0, .9, 1.3, 0, Rg + .9)
+    return m
+
+
+def brick_b():
+    """narrow three-bay brick town house, side-hall door, paired chimneys on one gable"""
+    m = Model('brick_b'); W, D, E, Rg = 6.6, 8.6, 6.6, 9.0
+    foundation(m, W, D, .7, 'stoneDark'); m.house_body(W, D, E, Rg, 'brick'); m.gable_roof(W, D, E, Rg, over=.2, mat='roofTin')
+    m.door(-2.1, .7, D / 2, 1.0, 2.3, F); m.window(-2.1, 3.3, D / 2, .9, .32, F, panes=False)
+    for x in (-.2, 1.9): m.window(x, 2.3, D / 2, .85, 1.5, F)
+    for x in (-2.1, -.2, 1.9): m.window(x, 5.0, D / 2, .85, 1.35, F)
+    for z in (-2.4, 0.3, 2.6): m.window(W / 2, 2.3, z, .85, 1.5, Rt); m.window(W / 2, 5.0, z, .85, 1.35, Rt)
+    for z in (-2.8, 2.8): chimney(m, -W / 2 + .45, z, .8, .9, E - .5, Rg + .9)
+    m.box('stoneLight', -3.0, 0, D / 2, -1.2, .7, D / 2 + 1.2, skip=('bottom',))
+    return m
+
+
+def store_b():
+    """small one-storey false-front shop with a big display window and an awning"""
+    m = Model('store_b'); W, D, E, Rg = 6.6, 9.0, 3.6, 5.2
+    foundation(m, W, D, .35); m.house_body(W, D, E, Rg, 'clapboardGrey', along='z'); m.gable_roof(W, D, E, Rg, over=.2, mat='roofWood', along='z')
+    m.box('facade', -W / 2 - .2, 0, D / 2, W / 2 + .2, 6.0, D / 2 + .2, skip=('bottom',)); m.box('trim', -W / 2 - .35, 5.8, D / 2 - .05, W / 2 + .35, 6.25, D / 2 + .4, skip=('bottom',))
+    m.panel('woodDark', (-2.2, 4.3, D / 2 + .25), (2.2, 4.3, D / 2 + .25), (2.2, 5.3, D / 2 + .25), (-2.2, 5.3, D / 2 + .25), (0, 0, 1))
+    m.window(-1.4, 1.8, D / 2 + .2, 2.6, 1.9, F); m.door(1.9, .35, D / 2 + .2, 1.1, 2.3, F)
+    m.slab('canvas', (-W / 2, 3.4, D / 2 + .25), (W / 2, 3.4, D / 2 + .25), (W / 2, 2.8, D / 2 + 1.8), (-W / 2, 2.8, D / 2 + 1.8), .06)
+    m.box('wood', -W / 2 - .2, 0, D / 2 + .2, W / 2 + .2, .35, D / 2 + 1.9, skip=('bottom',))
+    for x in (-2.6, 2.6): m.box('woodDark', x - .1, 0, D / 2 + 2.3, x + .1, 1.1, D / 2 + 2.5)                        # hitching posts
+    m.box('woodDark', -2.7, .95, D / 2 + 2.33, 2.7, 1.05, D / 2 + 2.47)
+    return m
+
+
+def barn_b():
+    """weathered grey barn with a lean-to shed on one side"""
+    m = Model('barn_b'); W, D, E, Rg = 11.5, 8.0, 4.6, 8.2
+    m.box('stone', -W / 2 - .1, 0, -D / 2 - .1, W / 2 + .1, .6, D / 2 + .1, skip=('bottom',))
+    m.house_body(W, D, E, Rg, 'woodGrey'); m.gable_roof(W, D, E, Rg, over=.45, mat='roofWood')
+    m.door(-1.0, .6, D / 2, 3.4, 3.4, F, mat='woodDark'); m.door(-1.0, 5.0, D / 2, 1.4, 1.5, F, mat='woodDark')
+    for sx, n in ((-1, L), (1, Rt)): m.door(sx * W / 2, 5.0, 0, 1.2, 1.4, n, mat='woodDark')
+    m.box('woodGrey', W / 2, 0, -D / 2 + .3, W / 2 + 3.4, 2.6, D / 2 - .3, skip=('bottom', 'left'), mats={'front': 'woodDark'})   # lean-to, open front
+    m.slab('roofWood', (W / 2 - .1, 4.0, -D / 2), (W / 2 - .1, 4.0, D / 2), (W / 2 + 3.8, 2.6, D / 2), (W / 2 + 3.8, 2.6, -D / 2), .12)
+    return m
+
+
+def outhouse():
+    m = Model('outhouse')
+    m.box('woodGrey', -.65, 0, -.65, .65, 2.1, .65, skip=('bottom',)); m.door(0, 0, .65, .7, 1.8, F, mat='woodDark', trim='woodGrey')
+    m.slab('roofWood', (-.85, 2.35, -.85), (.85, 2.35, -.85), (.85, 2.05, .9), (-.85, 2.05, .9), .08)
+    return m
+
+
+def picket():
+    """6 m of whitewashed picket fence (for yards); the game stretches it to fit"""
+    m = Model('picket')
+    for x in (-3.0, 0.0, 3.0): m.box('trim', x - .06, 0, -.06, x + .06, 1.25, .06, skip=('bottom',))
+    for y in (.3, .85): m.box('trim', -3.0, y, -.1, 3.0, y + .08, -.04)
+    for i in range(20):
+        x = -2.85 + i * .3; m.box('trim', x - .05, 0, .0, x + .05, 1.0, .03, skip=('bottom',))
+        m.tri('trim', (x - .05, 1.0, .015), (x + .05, 1.0, .015), (x, 1.12, .015), centre=(x, 1.0, -1))
+    return m
+
+
+def wagon(covered=True):
+    m = Model('wagon_covered' if covered else 'wagon')
+    m.box('wood', -1.7, .75, -.55, 1.7, 1.25, .55, mats={'top': 'woodDark'})
+    for x, r in ((-1.15, .6), (1.15, .48)):
+        for z in (-.68, .68):
+            with m.at(x=x, y=r, z=z, rx=90): m.cyl('woodDark', r, r, -.05, .05, seg=10)
+    m.box('woodDark', 1.7, .7, -.06, 3.3, .8, .06)                                                                   # tongue
+    if covered: m.prism([(-.62, 1.25), (.62, 1.25), (.62, 1.85), (.38, 2.25), (-.38, 2.25), (-.62, 1.85)], -1.5, 1.5, 'canvas', cap='canvasDark')
+    else:
+        for x in (-.9, .2, 1.1): m.box('hay', x - .45, 1.25, -.4, x + .45, 1.6, .4)
+    return m
+
+
+def barrels():
+    m = Model('barrels')
+    for x, z, h in ((0, 0, 1.0), (.62, .2, 1.0), (.25, -.6, .9)):
+        with m.at(x=x, z=z):
+            m.cyl('wood', .28, .32, 0, h / 2, seg=9, cap=False); m.cyl('wood', .32, .28, h / 2, h, seg=9, cap=True, cap_mat='woodDark')
+            for y in (.15, h - .15): m.cyl('iron', .305, .305, y - .03, y + .03, seg=9, cap=False)
+    m.box('wood', -1.3, 0, -.4, -.5, .7, .4); m.box('wood', -1.15, .7, -.3, -.6, 1.15, .25)
+    return m
+
+
+def garden():
+    """kitchen garden: dug soil and rows of greens, 6 x 4 m"""
+    m = Model('garden')
+    m.box('earthDark', -3, 0, -2, 3, .12, 2, skip=('bottom',))
+    for i in range(6):
+        z = -1.6 + i * .64
+        m.prism([(z - .18, .12), (z + .18, .12), (z, .5)], -2.7, 2.7, 'cropGreen', cap='cropGreen')
+    return m
+
+
+def worm_fence(name='worm_a', rails=6, seed=1, jitter=.05):
+    """Virginia worm (snake) rail fence, 6 m of it: two zig-zag panels of stacked split rails crossing at the corners"""
+    import random
+    rnd = random.Random(seed); m = Model(name); A = .55
+    for (x0, z0), (x1, z1) in (((-3, -A), (0, A)), ((0, A), (3, -A))):
+        L = math.hypot(x1 - x0, z1 - z0) + .5; ang = -math.degrees(math.atan2(z1 - z0, x1 - x0))
+        for i in range(rails):
+            y = .14 + i * .2 + rnd.uniform(-jitter, jitter); mat = 'rail' if rnd.random() < .6 else 'railDark'; th = rnd.uniform(.08, .12)
+            with m.at(x=(x0 + x1) / 2 + rnd.uniform(-.05, .05), y=y, z=(z0 + z1) / 2, ry=ang, rz=rnd.uniform(-1.5, 1.5)):
+                m.box(mat, -L / 2, -th / 2, -th / 2, L / 2, th / 2, th / 2)
+    return m
+
+
+def post_rail():
+    """post-and-rail fence, 6 m: three posts, three rails that sag a little"""
+    import random
+    rnd = random.Random(7); m = Model('post_rail')
+    for x in (-3.0, 0.0, 3.0): m.box('railDark', x - .09, 0, -.09, x + .09, 1.45, .09, skip=('bottom',))
+    for x0 in (-3.0, 0.0):
+        for y in (.45, .85, 1.25):
+            with m.at(x=x0 + 1.5, y=y + rnd.uniform(-.05, .03), rz=rnd.uniform(-2, 2)): m.box('rail', -1.62, -.05, -.06, 1.62, .05, .06)
+    return m
+
+
+MODELS = {f.__name__: f for f in (house_b, cottage, house_l, brick_b, store_b, barn_b, outhouse, picket, barrels, garden, post_rail, farmhouse, barn, church, store, brick_house, log_cabin, grist_mill, stone_bridge, earthwork, wedge_tent, haystack, well, shed)}
+
+MODELS.update({'wagon': lambda: wagon(False), 'wagon_covered': lambda: wagon(True),
+               'worm_a': lambda: worm_fence('worm_a', 6, 11, .04), 'worm_b': lambda: worm_fence('worm_b', 5, 23, .08)})
 
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)

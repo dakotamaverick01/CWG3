@@ -21,6 +21,7 @@ class Model:
         self.name = name
         self.tris = {}          # material -> list of (a, b, c) vertex triples
         self.stack = [np.eye(4)]
+        self.smoke = []         # chimney-top points (metres); saved in the .glb node 'extras' and used by the game for chimney smoke
 
     # ---------- transforms (apply to everything added inside the `with`) ----------
     class _Push:
@@ -28,13 +29,17 @@ class Model:
         def __enter__(self): self.m.stack.append(self.m.stack[-1] @ self.mat)
         def __exit__(self, *a): self.m.stack.pop()
 
-    def at(self, x=0.0, y=0.0, z=0.0, ry=0.0, rz=0.0, s=1.0):
-        """translate, then rotate about Y (degrees, counter-clockwise seen from above), then about Z, then scale"""
+    def at(self, x=0.0, y=0.0, z=0.0, ry=0.0, rz=0.0, s=1.0, rx=0.0):
+        """translate, then rotate about Y (degrees, counter-clockwise seen from above), then about Z, then about X, then scale"""
         t = np.eye(4); t[:3, 3] = (x, y, z)
         a = math.radians(ry); r = np.eye(4); r[0, 0], r[0, 2], r[2, 0], r[2, 2] = math.cos(a), math.sin(a), -math.sin(a), math.cos(a)
         b = math.radians(rz); q = np.eye(4); q[0, 0], q[0, 1], q[1, 0], q[1, 1] = math.cos(b), -math.sin(b), math.sin(b), math.cos(b)
+        c = math.radians(rx); w = np.eye(4); w[1, 1], w[1, 2], w[2, 1], w[2, 2] = math.cos(c), -math.sin(c), math.sin(c), math.cos(c)
         sc = np.diag([s, s, s, 1.0])
-        return Model._Push(self, t @ r @ q @ sc)
+        return Model._Push(self, t @ r @ q @ w @ sc)
+
+    def smoke_at(self, x, y, z):
+        self.smoke.append([round(v, 3) for v in self._xf((x, y, z))])
 
     def _xf(self, p):
         m = self.stack[-1]; return tuple((m @ np.array([p[0], p[1], p[2], 1.0]))[:3])
@@ -178,7 +183,7 @@ class Model:
             out_prims.append({'attributes': {'POSITION': pa, 'NORMAL': na}, 'indices': ia, 'material': mi})
         def lin(c): c = c / 255.0; return c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4
         materials = [{'name': m, 'pbrMetallicRoughness': {'baseColorFactor': [*(lin(v) for v in (palette or {}).get(m, (180, 170, 150))), 1.0], 'metallicFactor': 0.0, 'roughnessFactor': 0.9}} for m in mats]
-        gj = {'asset': {'version': '2.0', 'generator': 'CWG3 tools/modelkit.py'}, 'scene': 0, 'scenes': [{'nodes': [0]}], 'nodes': [{'mesh': 0, 'name': self.name}],
+        gj = {'asset': {'version': '2.0', 'generator': 'CWG3 tools/modelkit.py'}, 'scene': 0, 'scenes': [{'nodes': [0]}], 'nodes': [{'mesh': 0, 'name': self.name, **({'extras': {'smoke': self.smoke}} if self.smoke else {})}],
               'meshes': [{'name': self.name, 'primitives': out_prims}], 'materials': materials, 'accessors': accs, 'bufferViews': views, 'buffers': [{'byteLength': len(bin_)}]}
         js = json.dumps(gj, separators=(',', ':')).encode()
         while len(js) % 4: js += b' '

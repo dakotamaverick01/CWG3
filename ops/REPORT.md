@@ -28,5 +28,11 @@ docs/shots/assets_gallery.png, assets_town.png, assets_farm.png, assets_bridge_m
 - Buildings: sky/ground fill light, weathering, per-building tint, soft sun shadows. Fences/walls/trees unchanged.
 - Evidence: docs/shots/tex_gallery_close.jpg, tex_town_close.jpg, tex_town.jpg, tex_bridge_mill.jpg.
 
+## Addendum 2 (pass 2: variety and life)
+- 15 new own models + 7 Kenney stones; per-copy paint/shade/turn/size; yard life (pickets, trees, gardens, privies, woodpiles, wagons, barrels); chimney smoke (Living).
+- Roads with uneven wandering ruts, lane grass, puddles, ragged edges; walls of 9 stone shapes with lichen; snake rail fences.
+- Evidence: docs/shots/pass2_town.jpg, pass2_farm.jpg, pass2_snake_fence.jpg, pass2_wall_lane.jpg, pass2_lane.jpg, pass2_gallery.jpg.
+- Not verified: frame rate on John's Mac (more instances + smoke); models.js is now ~0.9 MB.
+
 ## Suggested next brief (one line)
 John reviews gallery + in-game; then generate the next batch or vet his finds.

@@ -155,7 +155,7 @@
     62,
     64
   ],
-  "_patterns_about": "Surface pattern drawn by the shader for each palette colour (world_edges.js PATTERN): 0 none, 1 clapboard, 2 brick, 3 stone blocks, 4 shingles, 5 tin roof, 6 board-and-batten, 7 planks, 8 log grain, 9 earth/grass, 10 hay, 11 canvas, 12 dirt road.",
+  "_patterns_about": "Surface pattern drawn by the shader for each palette colour (world_edges.js PATTERN): 0 none, 1 clapboard, 2 brick, 3 stone blocks, 4 shingles, 5 tin roof, 6 board-and-batten, 7 planks, 8 log grain, 9 earth/grass, 10 hay, 11 canvas, 12 dirt road, 13 fieldstone (mottled, lichen), 14 weathered rail wood, 15 leafy greens.",
   "_patterns": {
     "clapboard": 1,
     "clapboardGrey": 1,
@@ -183,6 +183,24 @@
     "hayDark": 10,
     "canvas": 11,
     "canvasDark": 11,
-    "roadDirt": 12
-  }
+    "roadDirt": 12,
+    "rail": 14,
+    "railDark": 14,
+    "cropGreen": 15
+  },
+  "rail": [
+    132,
+    116,
+    94
+  ],
+  "railDark": [
+    98,
+    84,
+    66
+  ],
+  "cropGreen": [
+    84,
+    116,
+    54
+  ]
 }

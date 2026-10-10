@@ -447,3 +447,9 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - `src/world_structures.js` rewritten: towns face their roads (church + store per town), farms, mill, stone bridge, earthwork ring fort.
 - Next: John reviews looks in the gallery and in game; he may hunt CC0 models per the shopping list (`docs/ASSET_PIPELINE.md`).
 - Textures without image files (same day): per-material surface patterns drawn by the shader (clapboard, brick, stone, shingles, tin, boards, planks, logs, earth, hay, canvas, dirt), anti-aliased; sky/ground fill light; soft sun shadows under buildings. Gallery now uses the game's own shader. Shots: docs/shots/tex_*.jpg.
+
+## 2026-10-09 (late) — world pass 2: variety and life (Opus), on main
+- 15 new own models (3 house types, narrow brick, small store, grey barn, privy, picket, garden, barrels, 2 wagons, 2 snake fences, post-and-rail); 7 more Kenney stones.
+- Every copy varies: paint/roof/brick shade, pattern offset, small turn and size (shader, per-instance random). Yards: picket fences, shade trees, gardens, privies, woodpiles; roadside wagons; barrels at stores. Chimney smoke on the Living switch.
+- Roads: wandering uneven wheel ruts, grass strip on lanes, puddles, churned surface, ragged edges, per-road seed (world_edges.js ROAD_FS). Walls: 9 stone shapes, mottled + lichen, random size/tilt, rubble. Fences: snake rail (2 styles) + post-and-rail per edge.
+- Shots: docs/shots/pass2_*.jpg.

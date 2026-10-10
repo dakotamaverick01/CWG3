@@ -26,7 +26,10 @@ The game places models from the map data in `src/world_structures.js` (towns, fa
 ## Surface patterns and shadows (no texture files)
 
 Each palette colour has a **pattern number** (`_patterns` in `assets/models/palette.json`): 1 clapboard, 2 brick, 3 stone blocks,
-4 shingles, 5 tin roof, 6 board-and-batten, 7 planks, 8 log grain, 9 earth/grass, 10 hay, 11 canvas, 12 dirt road (0 = plain).
+4 shingles, 5 tin roof, 6 board-and-batten, 7 planks, 8 log grain, 9 earth/grass, 10 hay, 11 canvas, 12 dirt road, 13 fieldstone,
+14 weathered rail wood, 15 leafy greens (0 = plain). Kit models can set patterns per material in the manifest (`patterns`).
+**Variety:** every copy gets its own random number: house paint (white, cream, yellow, grey, faded red, pale green), roof/brick/board shade,
+pattern start point, a small turn and size change. Chimney points saved in our .glb files drive chimney smoke (Living switch).
 The baker stores that number per vertex; the shader in `src/world_edges.js` (IFS) draws the pattern from the model's own
 coordinates in metres, so there are no image files and it works by double-click. Lines are anti-aliased and fade out when
 zoomed far out, so nothing shimmers. Buildings also get sky/ground fill light, big weathering patches, a per-building tint, and
@@ -50,9 +53,9 @@ To give a new colour a pattern, add it to `_patterns` and re-bake. To change a p
 brick town house, log cabin, stone grist mill with water wheel, three-arch stone bridge, earthwork section, wedge tent,
 haystack, well, open shed.
 
-**Easy for me to generate next (also no need to find):** worm / snake rail fence, dry-stone wall, covered wooden bridge,
-corn shocks and wheat sheaves, Sibley (bell) tent, farm wagon, springhouse, tavern, courthouse, railroad track + depot,
-cemetery with headstones, abatis and gabions (field fortifications), signal tower.
+**Also done (pass 2):** 3 more house types (house_b, cottage, house_l), narrow brick house, small store, grey barn with lean-to, privy, picket fence, kitchen garden, barrels + crates, farm wagon (open and covered), 2 snake rail fences, post-and-rail fence.
+
+**Easy for me to generate next (no need to find):** covered wooden bridge, corn shocks and wheat sheaves, Sibley (bell) tent, springhouse, tavern, courthouse, railroad track + depot, cemetery with headstones, abatis and gabions (field fortifications), signal tower.
 
 **Worth finding (organic shapes are hard to write as code):**
 

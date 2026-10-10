@@ -29,12 +29,13 @@ CW.WorldEdges = (function () {
 
   // ---------- ribbons (roads, brooks) ----------
   // cross = [[offset px, [r,g,b,a]], ...] from one side to the other; returns a Mesh draped on the terrain
-  function ribbon(line, cross, W3, lift, mat, wf, af) {   // wf[i] widens/narrows the cross-section at point i, af[i] fades its alpha (both optional)
-    const n = line.length, m = cross.length, pos = new Float32Array(n * m * 3), cl = new Float32Array(n * m * 4), idx = [];
-    for (let i = 0; i < n; i++) { const a = line[Math.max(0, i - 1)], b = line[Math.min(n - 1, i + 1)], tx = b[0] - a[0], ty = b[1] - a[1], L = Math.hypot(tx, ty) || 1, nx = -ty / L, ny = tx / L;
-      for (let j = 0; j < m; j++) { const w = wf ? wf[i] : 1, v = W3(line[i][0] + nx * cross[j][0] * w, line[i][1] + ny * cross[j][0] * w), o = i * m + j; pos.set([v.x, v.y + lift, v.z], o * 3); cl.set(cross[j][1], o * 4); if (af) cl[o * 4 + 3] *= af[i];
+  function ribbon(line, cross, W3, lift, mat, wf, af, road) {   // wf[i] widens/narrows the cross-section at point i, af[i] fades its alpha (both optional)
+    const n = line.length, m = cross.length, pos = new Float32Array(n * m * 3), cl = new Float32Array(n * m * 4), st = new Float32Array(n * m * 4), idx = [], amax = Math.max(...cross.map(c => Math.abs(c[0])));
+    let run = 0;
+    for (let i = 0; i < n; i++) { if (i) run += Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]); const a = line[Math.max(0, i - 1)], b = line[Math.min(n - 1, i + 1)], tx = b[0] - a[0], ty = b[1] - a[1], L = Math.hypot(tx, ty) || 1, nx = -ty / L, ny = tx / L;
+      for (let j = 0; j < m; j++) { const w = wf ? wf[i] : 1, v = W3(line[i][0] + nx * cross[j][0] * w, line[i][1] + ny * cross[j][0] * w), o = i * m + j; pos.set([v.x, v.y + lift, v.z], o * 3); cl.set(cross[j][1], o * 4); if (af) cl[o * 4 + 3] *= af[i]; st.set([run, cross[j][0] / amax, road ? road.major : 0, road ? road.seed : 0], o * 4);
         if (i < n - 1 && j < m - 1) { const q = o, r = o + 1, s = o + m, t = o + m + 1; idx.push(q, s, r, r, s, t); } } }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aCol', new THREE.BufferAttribute(cl, 4)); g.setIndex(idx);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aCol', new THREE.BufferAttribute(cl, 4)); if (road) g.setAttribute('aST', new THREE.BufferAttribute(st, 4)); g.setIndex(idx);
     const me = new THREE.Mesh(g, mat); me.frustumCulled = false; me.renderOrder = 1; return me;
   }
   const RVS = `attribute vec4 aCol; varying vec4 vC; varying vec3 vW; varying float vDist;
@@ -46,21 +47,52 @@ CW.WorldEdges = (function () {
       #include <colorspace_fragment>
     }`;
 
+  // Roads: a dirt ribbon with two wheel ruts that wander together (an axle's width apart), fade and deepen unevenly; a grass strip down
+  // country lanes; puddles in the ruts here and there; churned, pebbly surface; ragged edges. Every road has its own seed.
+  const ROAD_VS = `attribute vec4 aCol, aST; varying vec4 vC, vST; varying vec3 vW; varying float vDist;
+    void main() { vC = aCol; vST = aST; vW = position; vec4 mv = viewMatrix * vec4(position, 1.0); vDist = -mv.z; gl_Position = projectionMatrix * mv; }`;
+  const ROAD_FS = `uniform vec3 uFog, uTone; uniform vec2 uFogR; varying vec4 vC, vST; varying vec3 vW; varying float vDist;
+    float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float n2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y); }
+    float n1(float x) { return n2(vec2(x, 0.37)); }
+    void main() {
+      float s = vST.x + vST.w * 977.0, a = vST.y, major = vST.z;
+      vec3 c = vC.rgb * uTone;
+      float off = (n1(s * 0.011) - 0.5) * 0.22 + (n1(s * 0.041 + 5.0) - 0.5) * 0.06;                   // the cart track drifts across the road
+      float gauge = 0.30 * (1.0 + (n1(s * 0.02 + 9.0) - 0.5) * 0.18), rut = 0.0, wet = 0.0;
+      for (int k = 0; k < 2; k++) { float sd = k == 0 ? -1.0 : 1.0, d = abs(a - off - sd * gauge);
+        float w = 0.10 + 0.05 * n1(s * 0.05 + sd * 3.0), deep = smoothstep(0.15, 0.75, n1(s * 0.023 + sd * 11.0 + 2.0));
+        float aa = fwidth(a) * 1.5; rut = max(rut, (1.0 - smoothstep(w * 0.35 - aa, w + aa, d)) * deep); wet = max(wet, 1.0 - smoothstep(w * 0.6, w * 1.3, d)); }
+      c *= 1.0 - 0.44 * rut; c = mix(c, c * vec3(0.86, 0.84, 0.88), rut * 0.5);                         // ruts: darker, slightly damp
+      float hump = (1.0 - major) * (1.0 - smoothstep(0.05, 0.14, abs(a - off))) * smoothstep(0.35, 0.62, n2(vec2(s * 0.09, a * 5.0)));
+      c = mix(c, vec3(0.105, 0.135, 0.050) * (0.8 + 0.5 * n2(vW.xz * 0.9)), hump * 0.75);               // grass down the middle of a lane
+      float pud = smoothstep(0.80, 0.88, n2(vec2(s * 0.014, 0.5) + vST.w * 3.1)) * wet;
+      c = mix(c, vec3(0.085, 0.10, 0.11) + 0.05 * n2(vW.xz * 0.6), pud * 0.85);                           // puddles
+      c *= 0.88 + 0.22 * n2(vW.xz * 0.22) + 0.05 * n2(vW.xz * 1.7);                                         // churned by hooves and boots
+      c += vec3(0.05, 0.045, 0.035) * step(0.955, h2(floor(vW.xz * 1.6))) * (1.0 - rut);                // stray pebbles
+      float alpha = vC.a * smoothstep(0.0, 0.16, (1.0 - abs(a)) - 0.30 * (n2(vec2(s * 0.06, a > 0.0 ? 3.0 : 9.0)) - 0.5));   // ragged edges
+      gl_FragColor = vec4(mix(c, uFog, smoothstep(uFogR.x, uFogR.y, vDist)), alpha);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`;
+
   // ---------- instanced pieces (fence, stones) ----------
   // Pattern 0 (fences, kit stones, trees' kin) keeps the original flat look. Patterns 1-12 (our buildings, see palette.json '_patterns')
   // are drawn here from the model's own coordinates in metres, so no texture files are needed: clapboard, brick, stone blocks,
   // shingles, tin, board-and-batten, planks, log grain, earth, hay, canvas, dirt. Every line is anti-aliased and fades out
   // when it would be thinner than ~2 screen pixels (zoomed out), so nothing shimmers. Lighting: low western sun + sky/ground fill.
-  const IVS = `attribute vec3 aBase, aRot, aSc, color; attribute float aK; varying vec3 vCol, vL, vNl, vN, vW; varying float vDist, vK, vR;
+  const IVS = `attribute vec3 aBase, aRot, aSc, color; attribute float aK; varying vec3 vCol, vL, vNl, vN, vW; varying float vDist, vK, vR0;
     void main() {
       float cy = cos(aRot.x), sy = sin(aRot.x), cp = cos(aRot.y), sp = sin(aRot.y);
       vec3 l = position * aSc; vec3 p = vec3(l.x * cp - l.y * sp, l.x * sp + l.y * cp, l.z); p = vec3(p.x * cy + p.z * sy, p.y, -p.x * sy + p.z * cy);
       vec3 n = vec3(normal.x * cp - normal.y * sp, normal.x * sp + normal.y * cp, normal.z); n = vec3(n.x * cy + n.z * sy, n.y, -n.x * sy + n.z * cy);
       float lam = max(dot(normalize(n), normalize(vec3(-0.5, 0.75, 0.25))), 0.0);   // same low western sun as the trees
       vCol = color * (0.52 + 0.62 * lam) * (0.9 + 0.2 * aRot.z) * vec3(1.04, 0.99, 0.88);
-      vL = position; vNl = normal; vN = n; vK = aK; vR = aRot.z; vW = aBase + p;
+      vL = position; vNl = normal; vN = n; vK = aK; vR0 = aRot.z; vW = aBase + p;
       vec4 mv = viewMatrix * vec4(aBase + p, 1.0); vDist = -mv.z; gl_Position = projectionMatrix * mv; }`;
-  const IFS = `uniform vec3 uFog; uniform vec2 uFogR; varying vec3 vCol, vL, vNl, vN, vW; varying float vDist, vK, vR;
+  const IFS = `uniform vec3 uFog; uniform vec2 uFogR; varying vec3 vCol, vL, vNl, vN, vW; varying float vDist, vK, vR0;
+    float vR;   // per-building random number, snapped so tiny interpolation errors can't flip a building's paint pixel by pixel
     float h1(float n) { return fract(sin(n * 91.73) * 43758.5453); }
     float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float n2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -68,6 +100,7 @@ CW.WorldEdges = (function () {
     float line(float c, float w) { float f = fract(c), d = min(f, 1.0 - f), a = fwidth(c) + 1e-4; return 1.0 - smoothstep(w - a, w + a, d); }   // 1 on a joint
     float fade(vec2 c) { vec2 f = fwidth(c); return 1.0 - smoothstep(0.22, 0.55, max(f.x, f.y)); }                                          // 0 when a cell < ~2 px
     vec3 pattern(float k, vec3 L, vec3 Nl) {
+      L += vec3(vR * 13.7, vR * 0.71, vR * 7.3);                                                        // every instance's boards/bricks start somewhere else
       vec2 t = normalize(vec2(-Nl.z, Nl.x) + 1e-5); float u = dot(L.xz, t), v = L.y;                      // wall-plane coordinates (metres)
       if (abs(Nl.y) > 0.92) { u = L.x; v = L.z; }                                                        // flat tops/floors
       if (k < 1.5) { float c = v / 0.30; float m = mix(0.80, 1.04, smoothstep(0.0, 0.45, fract(c))) * (0.97 + 0.06 * h1(floor(c)));   // clapboard
@@ -89,9 +122,17 @@ CW.WorldEdges = (function () {
       if (k < 9.5) return vec3(0.82 + 0.30 * n2(L.xz * 0.45) + 0.08 * n2(L.xz * 2.3));                                                     // earth / grass
       if (k < 10.5) return vec3(0.82 + 0.28 * n2(vec2(atan(L.z, L.x) * 6.0, L.y * 1.2)));                                                   // hay
       if (k < 11.5) return vec3((0.96 + 0.06 * n2(L.xy * 1.7)) * (1.0 - 0.12 * line(u / 0.9, 0.03)));                                     // canvas seams
-      return vec3(0.86 + 0.24 * n2(L.xz * 0.6) + 0.06 * n2(L.xz * 3.0));                                                                    // dirt road
+      if (k < 12.5) return vec3(0.86 + 0.24 * n2(L.xz * 0.6) + 0.06 * n2(L.xz * 3.0));                                                    // dirt road
+      if (k < 13.5) { float m = 0.62 + 0.34 * n2(L.xz * 5.1 + L.y * 4.3) + 0.08 * n2(L.xz * 17.0 + L.y * 13.0);                             // fieldstone: mottled
+        return mix(vec3(m), vec3(m) * vec3(1.18, 1.14, 0.86), smoothstep(0.70, 0.80, n2(L.xz * 14.0 + L.y * 11.0 + 4.0)) * 0.6); }                    //  + pale lichen
+      if (k < 14.5) return vec3(0.78 + 0.32 * n2(vec2((L.x + L.z) * 1.3, L.y * 22.0)) + 0.06 * h1(floor((L.x + L.z) * 0.3)));          // weathered rail wood
+      return vec3(0.78 + 0.40 * n2(L.xz * 4.0 + L.y * 3.0));                                                                                // leafy greens / moss
     }
+    vec3 paint(float r) {   // house paint per building: white, cream, pale yellow, dove grey, faded red, pale green
+      float i = floor(h1(r * 7.31 + 0.5) * 6.0);
+      return i < 1.0 ? vec3(1.0) : i < 2.0 ? vec3(1.0, 0.95, 0.83) : i < 3.0 ? vec3(1.02, 0.93, 0.68) : i < 4.0 ? vec3(0.80, 0.82, 0.84) : i < 5.0 ? vec3(0.86, 0.60, 0.52) : vec3(0.84, 0.92, 0.80); }
     void main() {
+      vR = floor(vR0 * 1000.0 + 0.5) / 1000.0;
       vec3 col = vCol;
       if (vK > 0.5) {
         vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N;
@@ -100,6 +141,11 @@ CW.WorldEdges = (function () {
         vec3 hemi = mix(vec3(0.40, 0.37, 0.32), vec3(0.50, 0.53, 0.58), N.y * 0.5 + 0.5);                   // warm ground bounce .. cool sky
         vec3 base = vCol / max((0.52 + 0.62 * max(dot(N, S), 0.0)) * (0.9 + 0.2 * vR) * vec3(1.04, 0.99, 0.88), vec3(0.05));   // undo the vertex light, keep colour + AO
         base *= pattern(vK, vL, normalize(vNl)) * (0.93 + 0.12 * n2(vW.xz * 0.04)) * (0.92 + 0.16 * vR);   // pattern, big weathering patches, per-building tint
+        if (vK < 1.5) base *= paint(vR);                                                                   // clapboard: each house its own paint
+        else if (vK > 3.5 && vK < 4.5) base *= mix(vec3(0.80, 0.83, 0.88), vec3(1.14, 1.04, 0.92), h1(vR * 5.3));   // roofs: new / weathered / mossy-dark
+        else if (vK > 5.5 && vK < 6.5) base *= 0.82 + 0.34 * h1(vR * 3.7);                                  // barn boards: fresh paint .. faded
+        else if (vK > 1.5 && vK < 2.5) base *= vec3(1.0, 0.95, 0.92) * (0.88 + 0.22 * h1(vR * 9.1));       // brick batches
+        else if (vK > 12.5) base *= mix(vec3(0.92, 0.95, 1.0), vec3(1.08, 1.02, 0.92), h1(vR * 4.9));      // stones / rails / greens: warm or cool
         col = base * (hemi + 0.68 * lam * vec3(1.06, 0.98, 0.84));
         if (vK > 4.5 && vK < 5.5) col += vec3(0.20, 0.19, 0.17) * pow(max(dot(reflect(-S, N), V), 0.0), 18.0);   // tin glints
       }
@@ -112,16 +158,24 @@ CW.WorldEdges = (function () {
   function pieces(M, W3) {
     const out = [];
     // fences: 2 pieces per hex edge, each pitched along the ground
-    for (const e of edgesOf(M, 'fence')) { const rand = CW.rng(e.k + 1);
+    const EMm = CW.EDGEMESH, hOf = k => (EMm[k] && EMm[k].h) || .33;
+    // fences: per hex edge one style (snake rail mostly, sometimes post-and-rail), 2 sections pitched along the ground, zig-zag phase random
+    for (const e of edgesOf(M, 'fence')) { const rand = CW.rng(e.k + 1), r0 = rand(), kind = r0 < .45 ? 'worm_a' : r0 < .82 ? 'worm_b' : 'post_rail';
       for (let h = 0; h < 2; h++) { const a = [e.p[0] + (e.q[0] - e.p[0]) * h / 2, e.p[1] + (e.q[1] - e.p[1]) * h / 2], b = [e.p[0] + (e.q[0] - e.p[0]) * (h + 1) / 2, e.p[1] + (e.q[1] - e.p[1]) * (h + 1) / 2],
-          A = W3(...a), B = W3(...b), dx = B.x - A.x, dz = B.z - A.z, run = Math.hypot(dx, dz) || 1;
-        out.push({ kind: 'fence', x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2, lift: 0, yaw: Math.atan2(-dz, dx), pitch: Math.atan2(B.y - A.y, run), rnd: rand(), sx: run * 1.05, sy: run * 1.6, sz: run * 1.9 }); } }
-    // walls: 4 big stones along the edge + 3 flat capstones between them
+          A = W3(...a), B = W3(...b), dx = B.x - A.x, dz = B.z - A.z, run = Math.hypot(dx, dz) || 1, flip = rand() < .5, k = run / 6.2;
+        out.push({ kind, x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2, lift: 0, yaw: Math.atan2(-dz, dx) + (flip ? Math.PI : 0), pitch: Math.atan2(B.y - A.y, run) * (flip ? -1 : 1), rnd: rand(),
+          sx: k * (1.02 + rand() * .06), sy: run * (.34 + rand() * .07), sz: k * (1.1 + rand() * .4) }); } }
+    // walls: 5 field stones of 6 shapes along the edge (each its own size, tilt and tint), 4 flat capstones of 3 shapes, rubble at the foot
+    const BIG = ['stoneA', 'stoneC', 'stoneD', 'stoneE', 'stoneF', 'stoneG'], CAP = ['stoneB', 'capB', 'capC'];
     for (const e of edgesOf(M, 'wall')) { const rand = CW.rng(e.k + 2), dx = e.q[0] - e.p[0], dy = e.q[1] - e.p[1], L = Math.hypot(dx, dy), nx = -dy / L, ny = dx / L, yaw0 = Math.atan2(-dy, dx);
-      for (let i = 0; i < 4; i++) { const t = (i + .5) / 4, j = (rand() - .5) * 2.4;
-        out.push({ kind: 'stoneA', x: e.p[0] + dx * t + nx * j, y: e.p[1] + dy * t + ny * j, lift: -.6, yaw: yaw0 + (rand() - .5) * .4, pitch: 0, rnd: rand(), sx: 12.5 * (.9 + rand() * .25), sy: 21 * (.85 + rand() * .3), sz: 6.6 * (.9 + rand() * .25) }); }
-      for (let i = 1; i < 4; i++) { const t = i / 4, j = (rand() - .5) * 2;
-        out.push({ kind: 'stoneB', x: e.p[0] + dx * t + nx * j, y: e.p[1] + dy * t + ny * j, lift: 5.6, yaw: yaw0 + (rand() - .5) * .5, pitch: 0, rnd: rand(), sx: 11 * (.9 + rand() * .2), sy: 26, sz: 7 * (.9 + rand() * .2) }); } }
+      for (let i = 0; i < 5; i++) { const t = (i + .3 + rand() * .4) / 5, j = (rand() - .5) * 2.6, kind = BIG[Math.floor(rand() * BIG.length)], ht = 6 + rand() * 2.5;
+        out.push({ kind, x: e.p[0] + dx * t + nx * j, y: e.p[1] + dy * t + ny * j, lift: -.6 - rand() * .5, yaw: yaw0 + (rand() - .5) * .6, pitch: (rand() - .5) * .25, rnd: rand(),
+          sx: 10 * (.85 + rand() * .35), sy: ht / hOf(kind), sz: 6.4 * (.85 + rand() * .3) }); }
+      for (let i = 0; i < 4; i++) { const t = (i + .5 + (rand() - .5) * .3) / 4, j = (rand() - .5) * 2, kind = CAP[Math.floor(rand() * CAP.length)];
+        out.push({ kind, x: e.p[0] + dx * t + nx * j, y: e.p[1] + dy * t + ny * j, lift: 5.2 + rand() * .8, yaw: yaw0 + (rand() - .5) * .7, pitch: (rand() - .5) * .2, rnd: rand(),
+          sx: 9 * (.8 + rand() * .4), sy: (2.6 + rand() * 1.4) / hOf(kind), sz: 6.6 * (.85 + rand() * .3) }); }
+      for (let i = 0; i < 2; i++) { const t = rand(), sd = rand() < .5 ? -1 : 1, kind = rand() < .5 ? 'stoneB' : BIG[Math.floor(rand() * BIG.length)], sz = 2.5 + rand() * 2;
+        out.push({ kind, x: e.p[0] + dx * t + nx * sd * (4.5 + rand() * 2), y: e.p[1] + dy * t + ny * sd * (4.5 + rand() * 2), lift: -.5, yaw: rand() * 6.283, pitch: (rand() - .5) * .5, rnd: rand(), sx: sz * 1.4, sy: sz / hOf(kind) * .6, sz: sz }); } }
     return out;
   }
 
@@ -149,10 +203,12 @@ CW.WorldEdges = (function () {
     const rmat = (tone, po) => new THREE.ShaderMaterial({ vertexShader: RVS, fragmentShader: RFS, uniforms: { ...fog, uTone: { value: new THREE.Vector3(...tone) } }, transparent: true, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: po, polygonOffsetUnits: po, side: THREE.DoubleSide });
     // roads
-    const roadMat = rmat([.84, .80, .72], -4);
+    const roadMat = new THREE.ShaderMaterial({ vertexShader: ROAD_VS, fragmentShader: ROAD_FS, uniforms: { ...fog, uTone: { value: new THREE.Vector3(.84, .80, .72) } }, transparent: true, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, side: THREE.DoubleSide });
+    let ri = 0;
     for (const rd of M.roads) { const hw = rd.major ? 6.5 : 5, line = smooth(rd.p.map(p => CW.center(...p)), 4);
       const cross = [[-hw * 1.4, col(70, 52, 30, 0)], [-hw * 1.08, col(86, 64, 38, .5)], [-hw * .72, col(136, 108, 70, 1)], [0, col(158, 130, 88, 1)], [hw * .72, col(136, 108, 70, 1)], [hw * 1.08, col(86, 64, 38, .5)], [hw * 1.4, col(70, 52, 30, 0)]];
-      const me = ribbon(line, cross, W3, 1.3, roadMat); scene.add(me); parts.push(me); stats.roads++; }
+      const me = ribbon(line, cross, W3, 1.3, roadMat, null, null, { major: rd.major ? 1 : 0, seed: ++ri }); scene.add(me); parts.push(me); stats.roads++; }
     // brooks: the water itself is the river's own water ribbon (render3d.js buildRibbon); here only the mud bank under it and the gravel beside it.
     // Lines come from the map file alone (world_water.js), spring first, mouth last.
     const bankMat = rmat([.86, .84, .78], -1), pebbles = [], pr = CW.rng(4242);
@@ -167,7 +223,7 @@ CW.WorldEdges = (function () {
       const me = ribbon(line, cross, W3, 1.0, bankMat, wf, af); me.renderOrder = 0; scene.add(me); parts.push(me); stats.brooks++; }
     // fences and walls: one instanced mesh per kind
     const list = pieces(M, W3).concat(pebbles); list.W3 = W3;
-    const inst = instanced(scene, list, EM, ['fence', 'stoneA', 'stoneB'], fog); inst.forEach(m => parts.push(m)); stats.pieces += list.length;
+    const inst = instanced(scene, list, EM, [...new Set(list.map(o => o.kind))], fog); inst.forEach(m => parts.push(m)); stats.pieces += list.length;
     state = { scene, parts }; return stats;
   }
   function dispose() { if (!state) return; state.parts.forEach(m => { state.scene.remove(m); m.geometry.dispose(); m.material.dispose(); }); state = null; }
