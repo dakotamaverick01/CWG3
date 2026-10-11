@@ -22,6 +22,8 @@
 <script>window.CW = {};</script>
 <script src="../assets/art/models.js"></script>
 <script src="../src/world_edges.js"></script>
+<script src="../assets/art/trees.js"></script>
+<script src="../src/world_trees.js"></script>
 <script>
 'use strict';
 // Drawn with the game's own instanced shader (src/world_edges.js), so patterns and lighting match the battlefield exactly.
@@ -44,6 +46,16 @@ rows.forEach((r, ri) => { const tot = r.reduce((a, it) => a + it.w + GAP, -GAP);
     const lab = document.createElement('div'); lab.className = 'lab'; lab.innerHTML = `${it.k}<br><i>${m.tris} tris · ${m.norm === 'meters' ? m.h.toFixed(1) + ' m tall' : 'kit, shown ~' + (PREV[it.k] || 3) + ' m'}</i>`; document.body.appendChild(lab);
     items.push({ pos, lab }); cx += it.w + GAP; }); });
 CW.WorldEdges.instanced(scene, list, CW.MODELS, keys, { uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(1e5, 2e5) } });
+// our own trees (tools/gen_trees.py): every species with all its variants, two rows behind the buildings, wind on
+const TU = { uT: { value: 0 }, uLive: { value: 1 } };
+if (CW.TREES) { const tl = [], SP = Object.keys(CW.TREES.species); let tx = 0, tz = -rows.length * 32 - 6, tw = 0;
+  const rowW = SP.slice(0, 5).reduce((a, k) => a + CW.TREES.species[k].reduce((b, m) => b + Math.max(2.4, m.r * 2) + 3, 0), 0);
+  SP.forEach((k, si) => { if (si === 5) { tx = 0; tz -= 26; } if (si === 0 || si === 5) tw = rowW;
+    CW.TREES.species[k].forEach((m, v) => { const w = Math.max(2.4, m.r * 2) + 3; tl.push({ sp: k, v, x: tx + w / 2 - tw / 2, y: tz, s: 1, sy: 1, yaw: v * 1.3, rnd: (v * .37 + si * .13) % 1, hex: 0, sh: .3 });
+      if (v === 0) { const lab = document.createElement('div'); lab.className = 'lab'; lab.innerHTML = `${k}<br><i>${CW.TREES.species[k].length} variants · ${m.tris} tris · ${m.h.toFixed(0)} m</i>`; document.body.appendChild(lab); items.push({ pos: new THREE.Vector3(tx + w / 2 - tw / 2, 0, tz), lab }); }
+      tx += w; }); });
+  CW.WorldTrees.draw(scene, tl, (x, y) => new THREE.Vector3(x, 0, y), { uOcc: { value: new THREE.DataTexture(new Uint8Array(4), 1, 1) }, uOccN: { value: new THREE.Vector2(1, 1) },
+    uT: TU.uT, uLive: TU.uLive, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(1e5, 2e5) } }); }
 const st = window.st = { yaw: .3, pitch: .55, dist: 175, spin: true, t: 0 };
 addEventListener('pointerdown', e => { const x0 = e.clientX, y0 = e.clientY, a = st.yaw, b = st.pitch;
   const mv = ev => { st.yaw = a - (ev.clientX - x0) * .006; st.pitch = Math.max(.08, Math.min(1.4, b + (ev.clientY - y0) * .004)); };
@@ -52,7 +64,7 @@ addEventListener('wheel', e => { st.dist = Math.max(15, Math.min(400, st.dist * 
 document.getElementById('spin').onclick = e => { st.spin = !st.spin; e.target.textContent = st.spin ? 'pause spin' : 'spin'; };
 function frame() {
   const w = innerWidth, h = innerHeight; if (cv.width !== Math.floor(w * ren.getPixelRatio())) { ren.setSize(w, h); cam.aspect = w / h; cam.updateProjectionMatrix(); }
-  if (st.spin) st.yaw += .002;
+  if (st.spin) st.yaw += .002; TU.uT.value = performance.now() / 1000;
   const cz = -(rows.length - 1) * 16; cam.position.set(Math.sin(st.yaw) * Math.cos(st.pitch) * st.dist, Math.sin(st.pitch) * st.dist, cz + Math.cos(st.yaw) * Math.cos(st.pitch) * st.dist); cam.lookAt(0, 4, cz);
   ren.render(scene, cam);
   items.forEach(it => { const v = it.pos.clone(); v.y = -1.5; v.project(cam); it.lab.style.left = ((v.x + 1) / 2 * w) + 'px'; it.lab.style.top = ((1 - v.y) / 2 * h) + 'px'; it.lab.style.display = v.z < 1 ? '' : 'none'; });

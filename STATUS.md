@@ -453,3 +453,8 @@ C. Grok batch 2 via Claude in Chrome (Gemini if Grok is maxed): meadow grass, wo
 - Every copy varies: paint/roof/brick shade, pattern offset, small turn and size (shader, per-instance random). Yards: picket fences, shade trees, gardens, privies, woodpiles; roadside wagons; barrels at stores. Chimney smoke on the Living switch.
 - Roads: wandering uneven wheel ruts, grass strip on lanes, puddles, churned surface, ragged edges, per-road seed (world_edges.js ROAD_FS). Walls: 9 stone shapes, mottled + lichen, random size/tilt, rubble. Fences: snake rail (2 styles) + post-and-rail per edge.
 - Shots: docs/shots/pass2_*.jpg.
+
+## 2026-10-11 — living fields, piece 1: trees (Opus), on main
+- Own painterly trees written as code: `tools/gen_trees.py` (10 species x 2-4 variants, ~250-430 tris; bark tubes + leaf cards on a painted atlas) -> `assets/art/trees.js` (CW.TREES). Run `python3 tools/gen_trees.py` (no -I: needs numpy + Pillow, now installed for John's Python).
+- `src/world_trees.js` rewritten: forests (8-12 canopy trees by species weight, sycamores by water, understory, edge shrubs), orchard apple rows, lone field trees, hedgerow trees on ~12% of fence edges, town/farm yard trees. Leaf light: wrap + sun-through-leaves glow, crown AO, per-tree tint, fog. Wind on Living only (`CW.WorldTrees.WIND` = shared gust for grass/crops). Soft shadows cast east, one draw.
+- `tools/shot.py` now also runs on John's Mac (installed Chrome) and has `bench` / `freeze,name` views. Shots: docs/shots/fields_p1_trees.jpg. Next: piece 2 (grass).

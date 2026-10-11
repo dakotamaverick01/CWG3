@@ -187,7 +187,7 @@ CW.WorldStructures = (function () {
   // env: { scene, M, W3, U (shared Living uniforms) }
   function build(env) {
     const SM = CW.MODELS; if (!SM) throw new Error('models.js missing');
-    dispose(); scene = env.scene; const list = place(env.M); list.W3 = env.W3;
+    dispose(); scene = env.scene; const list = place(env.M).filter(o => !(CW.TREES && o.kind === 'broadleaf')); list.W3 = env.W3;   // yard trees: drawn by world_trees.js
     const fog = { uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
     parts = CW.WorldEdges.instanced(scene, list, SM, [...new Set(list.map(o => o.kind))], fog);
     const sh = shadows(list); if (sh) { scene.add(sh); parts.push(sh); }

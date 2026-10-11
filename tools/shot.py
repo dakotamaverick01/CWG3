@@ -2,11 +2,13 @@
 """Headless screenshots of CWG3 for checking visual work (cloud workspace: Playwright + /opt/pw-browsers/chromium, software GL).
 
 Usage:
-  python3 -I tools/shot.py OUTDIR c,r,zoom,tilt,name [c,r,zoom,tilt,name ...]   -> game views centred on hex (c, r)
-  python3 -I tools/shot.py OUTDIR --gallery [dist]                              -> tools/model_gallery.html
+  python3 tools/shot.py OUTDIR c,r,zoom,tilt,name [c,r,zoom,tilt,name ...]   -> game views centred on hex (c, r)
+  python3 tools/shot.py OUTDIR --gallery [dist]                              -> tools/model_gallery.html
 Examples:
-  python3 -I tools/shot.py /tmp/o 21,9,3.6,40,town 13,9,3.4,42,farm 18,6,4.2,40,wall
+  python3 tools/shot.py /tmp/o 21,9,3.6,40,town 13,9,3.4,42,farm 18,6,4.2,40,wall
 Notes:
+  - Needs Playwright (pip3 install --user playwright pillow numpy). Run WITHOUT -I on the Mac (-I hides user-installed packages).
+  - Extra views: 'bench' / 'bench,live' prints ms per frame; 'freeze,name' saves Living off/on frames to prove motion and freezing.
   - Starts a new battle as the Union, hides the roster, holds the camera (the game re-centres on units otherwise).
   - Software GL is slow (~0.3-1 s/frame): only RELATIVE timings mean anything; John's Mac is the real test.
   - Prints console warnings/errors at the end. Saves OUTDIR/<name>.png (full) and OUTDIR/<name>.jpg (map area only).
@@ -16,13 +18,19 @@ import os, sys
 from playwright.sync_api import sync_playwright
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--allow-file-access-from-files']
+CLOUD = '/opt/pw-browsers/chromium'   # cloud workspace browser (software GL); on John's Mac we use the installed Google Chrome (real GPU)
+ARGS = (['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] if os.path.exists(CLOUD) else []) + ['--ignore-gpu-blocklist', '--allow-file-access-from-files']
+
+
+def launch(p):
+    if os.path.exists(CLOUD): return p.chromium.launch(executable_path=CLOUD, args=ARGS)
+    return p.chromium.launch(channel='chrome', args=ARGS)
 
 
 def main():
     out = sys.argv[1]; os.makedirs(out, exist_ok=True); views = sys.argv[2:]
     with sync_playwright() as p:
-        b = p.chromium.launch(executable_path='/opt/pw-browsers/chromium', args=ARGS)
+        b = launch(p)
         logs = []
         if views and views[0] == '--gallery':
             pg = b.new_page(viewport={'width': 1400, 'height': 900}); pg.on('console', lambda m: logs.append(m.type + ': ' + m.text[:200]))
@@ -40,6 +48,13 @@ def main():
             pg.evaluate("() => { const b=[...document.querySelectorAll('button')].find(x=>x.offsetParent && /begin/i.test(x.textContent)); b.click(); }")
             pg.wait_for_timeout(15000)
             for v in views:
+                if v.startswith('bench'):   # 'bench' or 'bench,live': ms per frame at the current view (relative numbers only)
+                    print('bench', v, pg.evaluate(f"() => CW.R3.bench(30, {'true' if 'live' in v else 'false'})")); continue
+                if v.startswith('freeze,'):   # 'freeze,name': saves name_off_a/b (Living off, t=1 and t=3) and name_on_b (Living on, t=3)
+                    import base64; nm = v.split(',')[1]
+                    for tag, t, live in (('off_a', 1, 'false'), ('off_b', 3, 'false'), ('on_b', 3, 'true')):
+                        u = pg.evaluate(f"() => CW.R3.snap({t}, {live})"); open(os.path.join(out, f'{nm}_{tag}.png'), 'wb').write(base64.b64decode(u.split(',')[1]))
+                    print('freeze shots', nm); continue
                 c, r, z, tilt, name = v.split(',')
                 pg.evaluate(f"""() => {{ CW.G.opts.roster = false; clearInterval(window.__h); CW.G.cam.z = {z}; CW.R3.tilt({tilt} - CW.R3.tiltDeg);
                     window.__h = setInterval(() => CW.centerOn({c}, {r}), 200); CW.centerOn({c}, {r}); }}""")
