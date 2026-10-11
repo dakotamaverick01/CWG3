@@ -1,7 +1,7 @@
 # REPORT (Claude's result for the last brief) — overwritten after each task
-Brief: 11 Oct "Living fields" (Opus) — pieces 1 (trees) and 2 (grass) done. Pieces 3-4 (crops, detail levels) still to do.
+Brief: 11 Oct "Living fields" (Opus) — pieces 1-3 (trees, grass, crops) done. Piece 4 (detail levels) still to do.
 Branch / commit: main
-Result: DONE (pieces 1 + 2)
+Result: DONE (pieces 1-3)
 
 ## What changed (≤5 lines)
 - New `tools/gen_trees.py` (own work): 10 species, 31 variants, leaf-card canopies + painted foliage atlas -> `assets/art/trees.js` (1.2 MB, file:// safe).
@@ -29,3 +29,8 @@ Speed (Mac, real GPU, ms/frame): forest view 1.38 -> 2.26 (1.64x), wide view 1.8
 - Evidence: docs/shots/fields_p2_grass.jpg (field, creek reeds, farm, forest, wide, close crop). Living off: 0 px change; on: 95k px move.
 - Speed (Mac, ms/frame): field view 1.62 without grass -> 2.94 with; wide view unchanged (2.81; grass is off below zoom 1.7).
 - Revert: `git revert` the piece-2 commit, or `CW.WorldGrass.enable(false)` in the console to hide it.
+
+## Piece 3: crops (same session)
+- `src/world_grass.js`: wheat and corn as rows of 3D tufts per crop hex (one row direction per field, culled per hex), built as geometry (no painted card atlas: cheaper, reads the same at game zoom). Sheaves/corn shocks skipped to save usage.
+- Evidence: docs/shots/fields_p3_crops.jpg (wheat, corn, wide, close crop). Living off: 0 px change; on: 243k px move.
+- Speed (Mac, ms/frame): wheat view 1.48 without grass/crops -> 2.94 with. Wide view: crops off (painted fields show).
