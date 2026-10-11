@@ -1,7 +1,7 @@
 # REPORT (Claude's result for the last brief) — overwritten after each task
-Brief: 11 Oct "Living fields" (Opus) — piece 1 only (trees). Pieces 2-4 (grass, crops, detail levels) still to do, each in a fresh session.
+Brief: 11 Oct "Living fields" (Opus) — pieces 1 (trees) and 2 (grass) done. Pieces 3-4 (crops, detail levels) still to do.
 Branch / commit: main
-Result: DONE (piece 1)
+Result: DONE (pieces 1 + 2)
 
 ## What changed (≤5 lines)
 - New `tools/gen_trees.py` (own work): 10 species, 31 variants, leaf-card canopies + painted foliage atlas -> `assets/art/trees.js` (1.2 MB, file:// safe).
@@ -22,3 +22,10 @@ Speed (Mac, real GPU, ms/frame): forest view 1.38 -> 2.26 (1.64x), wide view 1.8
 ## Open questions for John / Grok
 1. Tree size: forests now ~16-27 m tall trees (real-world). Too tall next to units at your usual zoom?
 2. Colour: deep high-summer green. Darker/lighter?
+
+## Piece 2: grass (same session)
+- New `src/world_grass.js`: grass tufts on a lattice that follows the camera (pinned to the ground, no visible repeats), density from hex letters, wildflowers, dry/lush patches, flattened under units, wind on Living only. Reeds and cattails along brooks and river banks.
+- `src/render3d.js`: one added line (build grass after trees). `play.html`: loads world_grass.js. `tools/shot.py`: `js:<expr>` view.
+- Evidence: docs/shots/fields_p2_grass.jpg (field, creek reeds, farm, forest, wide, close crop). Living off: 0 px change; on: 95k px move.
+- Speed (Mac, ms/frame): field view 1.62 without grass -> 2.94 with; wide view unchanged (2.81; grass is off below zoom 1.7).
+- Revert: `git revert` the piece-2 commit, or `CW.WorldGrass.enable(false)` in the console to hide it.

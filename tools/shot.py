@@ -8,7 +8,7 @@ Examples:
   python3 tools/shot.py /tmp/o 21,9,3.6,40,town 13,9,3.4,42,farm 18,6,4.2,40,wall
 Notes:
   - Needs Playwright (pip3 install --user playwright pillow numpy). Run WITHOUT -I on the Mac (-I hides user-installed packages).
-  - Extra views: 'bench' / 'bench,live' prints ms per frame; 'freeze,name' saves Living off/on frames to prove motion and freezing.
+  - Extra views: 'bench' / 'bench,live' prints ms per frame; 'freeze,name' saves Living off/on frames to prove motion and freezing; 'js:<expr>' runs JS.
   - Starts a new battle as the Union, hides the roster, holds the camera (the game re-centres on units otherwise).
   - Software GL is slow (~0.3-1 s/frame): only RELATIVE timings mean anything; John's Mac is the real test.
   - Prints console warnings/errors at the end. Saves OUTDIR/<name>.png (full) and OUTDIR/<name>.jpg (map area only).
@@ -50,6 +50,8 @@ def main():
             for v in views:
                 if v.startswith('bench'):   # 'bench' or 'bench,live': ms per frame at the current view (relative numbers only)
                     print('bench', v, pg.evaluate(f"() => CW.R3.bench(30, {'true' if 'live' in v else 'false'})")); continue
+                if v.startswith('js:'):   # 'js:<expression>' runs in the page and prints the result (e.g. js:CW.WorldGrass.enable(false))
+                    print(v[:60], pg.evaluate('() => (' + v[3:] + ')')); continue
                 if v.startswith('freeze,'):   # 'freeze,name': saves name_off_a/b (Living off, t=1 and t=3) and name_on_b (Living on, t=3)
                     import base64; nm = v.split(',')[1]
                     for tag, t, live in (('off_a', 1, 'false'), ('off_b', 3, 'false'), ('on_b', 3, 'true')):
