@@ -13,6 +13,7 @@ Tilted camera, living landscape, battle smoke, mesh ground, 3D trees + mill, CC0
 - Wire title/menu/after-action art (`assets/incoming/title/`).
 - AI moves glide one at a time.
 - Check sluggishness on the Mac.
+- Move battle unit lists out of code (`src/units_demo.js`) into data files next to each map.
 - Next world pass (what to improve) — TBD.
 - Rules/AI polish — specs in `docs/RULES_SPEC.md`, `docs/AI_DESIGN.md`, `docs/COMBAT.md`.
 

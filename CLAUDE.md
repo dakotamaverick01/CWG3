@@ -1,4 +1,4 @@
-# CWG3 — instructions for Claude (auto-loaded every session)
+# CWG3 — instructions for Claude (rules for any Claude session: chat, desktop or iPhone, or Claude Code)
 
 Project: browser remake of *Robert E. Lee: Civil War Generals 2*. Owner: John (hobby, non-programmer; keep replies short, explain jargon).
 
