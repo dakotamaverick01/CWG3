@@ -1,5 +1,5 @@
 # BRIEF: Terrain B — knolls and ridges (est. ~2% usage)
-Status: READY, run AFTER Terrain A. Read CLAUDE.md, ops/TERRAIN_RULES.md, then this file. Do piece B only.
+Status: DONE 17 Oct (see STATUS.md, 2026-10-17). Read CLAUDE.md, ops/TERRAIN_RULES.md, then this file. Do piece B only.
 
 ## Goal
 Knoll (`k`) hexes and ridges are real raised shapes you can see from the side, following the rule in ops/TERRAIN_RULES.md.

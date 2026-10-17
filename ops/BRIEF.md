@@ -1,5 +1,5 @@
 # BRIEF (current directive for Claude) — overwritten for each task
-Status: ACTIVE — written 11 Oct 2026 (Opus session) with John's answers. Run it in a FRESH session, one piece at a time.
+Status: DONE (pieces 1-4 finished 17 Oct, see ops/REPORT.md) — written 11 Oct 2026 (Opus session) with John's answers. Run it in a FRESH session, one piece at a time.
 
 ## Goal
 "Living fields": replace the blobby Kenney trees and the flat painted grass/crops with painterly-realistic 3D trees, grass and crops,

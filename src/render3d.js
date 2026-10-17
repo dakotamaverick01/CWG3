@@ -8,13 +8,13 @@
 // Revert = set CW.WORLD = false here (or open play.html?world=0 to compare without editing).
 CW.WORLD = true; try { if (/[?&]world=0\b/.test(location.search)) CW.WORLD = false; } catch (e) {}
 CW.R3 = (function () {
-  const EX = 30, FOV = 30, TILT_MIN = 40, TILT_MAX = 80, TILT_DEF = 40;   // EX = height of one level in map px (hex radius 44)
+  const EX = 36, FOV = 30, TILT_MIN = 40, TILT_MAX = 80, TILT_DEF = 40;   // EX = height of one level in map px (hex radius 44); terrain pass 17 Oct: 30 -> 36 so hills read
   let ok = false, failed = false, ren, scene, cam, dcv, dctx, dtex, ttex, terrainSrc = null, M, MW, MH, HW, HH, HF, glc;
   const FULLRES = /[?&]fullres\b/.test(location.search);   // play.html?fullres keeps full board resolution (no automatic step-down)
   const S = { res: 1, dpr0: 0, tilt: TILT_DEF, anim: null, last: null, live: false, raf: 0, prev: 0, acc: 0, n: 0, win0: 0, mats: [], wk: new Map(), src: null, threads: null };
   // ---------- living landscape (sessions 17a-b, 18, 19): cloud shadows, 3D creek + wake, wind in the wheat, brook thread, tree sway, warm haze; one time uniform, patched into the ground material ----------
   const U = { uT: { value: 0 }, uLive: { value: 0 }, uWater: { value: null }, uForest: { value: null }, uWheatM: { value: null }, uWheatA: { value: null }, uWheatAvg: { value: window.THREE ? new THREE.Vector3(.31, .22, .084) : null }, uWheatOn: { value: 0 }, uMap: { value: window.THREE ? new THREE.Vector2(1, 1) : null },
-    uGround: { value: 0 }, uGA: { value: null }, uGW0: { value: null }, uGW1: { value: null } };   // world-mesh pass: tiled ground textures + terrain weight maps
+    uGround: { value: 0 }, uRelief: { value: null }, uHgt: { value: null }, uHgtSz: { value: window.THREE ? new THREE.Vector2(1, 1) : null }, uDet: { value: 1 }, uGA: { value: null }, uGW0: { value: null }, uGW1: { value: null } };   // world-mesh pass: tiled ground textures + terrain weight maps
   const GLSL_NOISE = `
     float cwH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float cwN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -29,15 +29,27 @@ CW.R3 = (function () {
     im.src = location.protocol === 'file:' ? CC0_DATA[n] : 'assets/art/ground/cc0/' + n + '.jpg'; }
   const GROUND_LAYERS = [['grass_ground_diff_1k', 'sgb_0', 'rocky_3'], ['leafy_grass_diff_1k', 'sgc_0', 'rocky_3'], ['crpb_1', 'wheat_0'], ['crpa_0', 'corn_0'], ['rocky_2'], ['farmyard_1'], ['rocky_1'], ['mud_3'], ['slpa_3', 'mud_0']];
   // channel per terrain letter: 0 grass, 1 wheat, 2 corn, 3 woods floor, 4 dirt, 5 knoll, 6 swamp, 7 creek bank (creek hexes are half grass)
-  const GROUND_CH = { g: [[0, 1]], o: [[0, 1]], f: [[3, 1]], h: [[4, 1]], t: [[4, 1]], x: [[4, 1]], k: [[5, 1]], s: [[6, 1]], w: [[7, .5], [0, .5]], b: [[7, .5], [0, .5]], d: [[7, .5], [0, .5]] };
+  const GROUND_CH = { g: [[0, 1]], o: [[0, 1]], f: [[3, 1]], h: [[4, 1]], t: [[4, 1]], x: [[4, 1]], k: [[5, 1]], s: [[6, 1]], w: [[0, 1]], b: [[0, 1]], d: [[7, .3], [0, .7]] };   // 17 Oct: river hexes are meadow; the mud band follows the water itself (uWater), not the hex
   const GLSL_GROUND = `
-    uniform sampler2DArray uGA; uniform sampler2D uGW0, uGW1; uniform float uGround;
+    uniform sampler2DArray uGA; uniform sampler2D uGW0, uGW1; uniform float uGround; uniform sampler2D uRelief; uniform vec2 uHgtSz;
+    // terrain pass (17 Oct): the land reads as land. Relief map: r = crest (+) / hollow (-) against the land ~2 hexes around, g = near water.
+    const vec3 CW_SUN = vec3(-0.9363, 0.2809, 0.2809);   // same direction as the scene's sun light
+    vec3 cwRelief(vec3 col, vec2 p, vec3 n) {
+      vec4 rl = texture2D(uRelief, p / uHgtSz); float rel = rl.r * 2.0 - 1.0, wet = rl.g, sl = clamp(1.0 - n.y, 0.0, 1.0), lum = dot(col, vec3(0.3, 0.59, 0.11));
+      float dry = smoothstep(0.04, 0.55, rel) * (0.55 + 0.45 * cwN(p / 90.0));                       // crests and knoll tops dry toward straw
+      col = mix(col, vec3(lum) * vec3(1.30, 1.10, 0.60), dry * 0.5);
+      col *= mix(vec3(1.0), vec3(0.82, 0.95, 0.84), clamp(max(smoothstep(0.04, 0.5, -rel), wet * 0.75), 0.0, 1.0));   // hollows and creek bottoms deep and lush
+      vec2 dr = normalize(n.xz + vec2(1e-4)), pr = vec2(-dr.y, dr.x);                                  // steep faces: worn soil in streaks down the fall line
+      float st = cwN(vec2(dot(p, dr) / 40.0, dot(p, pr) / 6.0)) * 0.7 + cwN(p / 23.0) * 0.3, wo = smoothstep(0.07, 0.22, sl) * smoothstep(0.48, 0.76, st);
+      col = mix(col, vec3(0.30, 0.235, 0.15) * (0.8 + 0.4 * cwN(p / 9.0)), wo * 0.55);
+      float sd = dot(n, CW_SUN) - CW_SUN.y; return col * clamp(1.0 + 0.7 * sd, 0.68, 1.25); }   // hill shading on top of the scene light
+
     vec3 cwT(float L, vec2 q, float rot) { float c = cos(rot), s = sin(rot); return texture(uGA, vec3(mat2(c, -s, s, c) * q, L)).rgb; }
     // two lookups per layer at different rotation / scale / offset, blended by mid-scale noise, so the 512 px repeat never lines up
     vec3 cwTile(float L, vec2 p) { float k = smoothstep(0.3, 0.7, cwN(p / 380.0 + L * 3.1));
       return mix(cwT(L, p / 215.0, 0.4 + L * 0.9), cwT(L, p / 265.0 + vec2(0.37, 0.61) * (L + 1.0), 2.1 + L * 1.3), k); }
     vec3 cwLayer(int i, vec2 p) {
-      if (i == 0) return mix(cwTile(0.0, p) * vec3(0.74, 1.62, 0.46), cwTile(1.0, p) * vec3(0.54, 1.20, 0.33), smoothstep(0.42, 0.62, cwF(p / 650.0)));   // CC0 photos are yellow-brown: tint toward green   // two meadows, swapped by large noise
+      if (i == 0) return mix(cwTile(0.0, p) * vec3(0.78, 1.52, 0.50), cwTile(1.0, p) * vec3(0.56, 1.12, 0.37), smoothstep(0.42, 0.62, cwF(p / 650.0)));   // CC0 photos are yellow-brown: tint toward green   // two meadows, swapped by large noise
       if (i == 3) return cwTile(4.0, p) * vec3(0.80, 0.90, 0.64);                                         // woods floor in the trees' shade
       return cwTile(float(i + 1), p); }
     vec3 cwGround(vec2 p) {
@@ -68,8 +80,8 @@ CW.R3 = (function () {
   function living(mat, water) {
     mat.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, U, CW.WAKE ? CW.WAKE.U : {});
-      sh.vertexShader = 'varying vec3 vCwW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vCwW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      sh.fragmentShader = `varying vec3 vCwW; uniform float uT, uLive; uniform sampler2D uWater, uForest, uWake, uWheatM, uWheatA; uniform vec2 uMap, uWTx; uniform vec4 uWBox; uniform vec3 uWheatAvg; uniform float uWheatOn;${GLSL_NOISE}${water ? GLSL_GROUND : ''}\n` + sh.fragmentShader
+      sh.vertexShader = 'varying vec3 vCwW, vCwNw;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vCwW = (modelMatrix * vec4(transformed, 1.0)).xyz; vCwNw = normalize(mat3(modelMatrix) * objectNormal);');
+      sh.fragmentShader = `varying vec3 vCwW, vCwNw; uniform float uT, uLive; uniform sampler2D uWater, uForest, uWake, uWheatM, uWheatA; uniform vec2 uMap, uWTx; uniform vec4 uWBox; uniform vec3 uWheatAvg; uniform float uWheatOn;${GLSL_NOISE}${water ? GLSL_GROUND : ''}\n` + sh.fragmentShader
         .replace('#include <map_fragment>', (water ? `
   // tree sway: inside the forest mask only, the painted canopies wobble 1-2 px (slow sine + noise); roads, walls and open ground stay put
   vec2 cwOff = vec2(0.0);
@@ -77,7 +89,7 @@ CW.R3 = (function () {
     if (fm > 0.01) { float n = cwN(vCwW.xz / 70.0 + uT * 0.06) * 6.283;
       cwOff = fm * 1.6 * vec2(sin(uT * 0.9 + vCwW.x * 0.031 + n), 0.5 * sin(uT * 0.7 + vCwW.z * 0.027 + n)) / uMap; } }
   // world-mesh: ground from tiled textures; the map texture is then only the painted props/markings layer (walls, fences, buildings, roads...)
-  vec3 cwG = vec3(1.0); if (uGround > 0.5) cwG = cwGround(vCwW.xz + uMap * 0.5);
+  vec3 cwG = vec3(1.0); if (uGround > 0.5) cwG = cwRelief(cwGround(vCwW.xz + uMap * 0.5), vCwW.xz + uMap * 0.5, normalize(vCwNw));
   vec3 cwWm = vec3(1.0);
   // session 19b: wheat fields carry a Blender-rendered flipbook of stalks bending in the wind (CW.WHEATFLOW); it multiplies the
   // painted wheat (colour / its average), the gust phase drifts across a field so tiles don't repeat in step, fades out when zoomed far out
@@ -288,9 +300,10 @@ CW.R3 = (function () {
     U.uGround.value = feat ? 1 : 0; try { buildObjects(feat ? S.trees || [] : []); } catch (e) { console.warn('3D trees skipped:', e.message); }
     if (CW.WORLD && CW.WorldTrees) { if (S.wt) { CW.WorldTrees.dispose(); S.wt = 0; } try { if (!S.occ || S.occ.image.width !== M.cols || S.occ.image.height !== M.rows) { S.occ = new THREE.DataTexture(new Uint8Array(M.cols * M.rows * 4), M.cols, M.rows, THREE.RGBAFormat); S.occ.needsUpdate = true; if (S.objs) S.objs.forEach(o => { if (o.material.uniforms.uOcc) o.material.uniforms.uOcc.value = S.occ; }); }
       S.wt = CW.WorldTrees.build({ scene, M, W3, occ: S.occ, U }); S.occKey = null; } catch (e) { console.warn('tree meshes skipped:', e.message); } }
-    if (CW.WORLD && CW.WorldGrass && S.occ) { try { S.wg = CW.WorldGrass.build({ scene, M, W3, occ: S.occ, U }); } catch (e) { console.warn('grass skipped:', e.message); } }   // living fields: grass blades + reeds
+    if (CW.WORLD && CW.WorldGrass && S.occ) { try { S.wg = CW.WorldGrass.build({ scene, M, W3, occ: S.occ, U, det: U.uDet.value }); } catch (e) { console.warn('grass skipped:', e.message); } }   // living fields: grass blades + reeds
     if (CW.WORLD && CW.WorldEdges) { try { CW.WorldEdges.dispose(); S.we = CW.WorldEdges.build({ scene, M, W3, U }); } catch (e) { console.warn('3D edges skipped:', e.message); } }
-    if (CW.WORLD && CW.WorldStructures) { try { CW.WorldStructures.dispose(); CW.WorldStructures.build({ scene, M, W3, U }); } catch (e) { console.warn('3D structures skipped:', e.message); } }   // T5: town, farm, bridge, ford, fort, knoll, mill from hex letters + map `structures`   // T4: roads, brooks, walls, fences from the map's edge data   // T2: mesh trees from hex letters if (S.feat && S.feat !== feat) { S.feat.width = S.feat.height = 0; } S.feat = feat;
+    if (CW.WORLD && CW.WorldStructures) { try { CW.WorldStructures.dispose(); CW.WorldStructures.build({ scene, M, W3, U }); } catch (e) { console.warn('3D structures skipped:', e.message); } }
+    if (CW.WORLD && CW.WorldLife && S.occ) { try { S.wl = CW.WorldLife.build({ scene, M, W3, occ: S.occ, U }); } catch (e) { console.warn('animals and birds skipped:', e.message); } }   // 17 Oct: grazing herds + vultures   // T5: town, farm, bridge, ford, fort, knoll, mill from hex letters + map `structures`   // T4: roads, brooks, walls, fences from the map's edge data   // T2: mesh trees from hex letters if (S.feat && S.feat !== feat) { S.feat.width = S.feat.height = 0; } S.feat = feat;
     ttex.image = feat || img; ttex.needsUpdate = true; }
   // ---------- world pass 2: trees and the mill as objects standing on the mesh ----------
   // Upright camera-facing billboards from the props atlas, all trees in ONE instanced draw (plus one for their soft ground shadows).
@@ -356,7 +369,10 @@ CW.R3 = (function () {
     const dt = now - S.prev; S.prev = now;
     S.acc += Math.min(dt, 500); S.n++; if (!S.win0) S.win0 = now;   // one long stall (map repaint) can't trip it alone; a slow machine can
     if (now - S.win0 >= 3000) { const avg = S.n ? S.acc / S.n : 0; S.avg = avg; S.acc = S.n = 0; S.win0 = now; if (avg > 40) {   // slow: first draw the board at lower resolution (1 -> 0.8 -> 0.65 of the usual pixels per side), only then give up the living landscape
-        if (S.res > 0.7 && S.dpr0 && S.last && !FULLRES) { S.res = S.res > 0.9 ? 0.8 : 0.65; ren.setPixelRatio(S.dpr0 * S.res); ren.setSize(S.last.w, S.last.h, false); try { ren.render(scene, cam); } catch (e) {} console.info('CWG3: slow frames (' + Math.round(avg) + ' ms), board resolution now ' + S.res); return; }
+        const resTo = r => { S.res = r; ren.setPixelRatio(S.dpr0 * S.res); ren.setSize(S.last.w, S.last.h, false); try { ren.render(scene, cam); } catch (e) {} console.info('CWG3: slow frames (' + Math.round(avg) + ' ms), board resolution now ' + S.res); };
+        if (S.res > 0.9 && S.dpr0 && S.last && !FULLRES) { resTo(0.8); return; }
+        if (S.detAuto && U.uDet.value > 0) { applyDetail(U.uDet.value - 1); console.info('CWG3: slow frames (' + Math.round(avg) + ' ms), detail now ' + DET[U.uDet.value]); CW.toast && CW.toast('Detail lowered to ' + DET[U.uDet.value] + ' to keep the battlefield smooth'); return; }
+        if (S.res > 0.7 && S.dpr0 && S.last && !FULLRES) { resTo(0.65); return; }
         if (S.onSlow) { S.onSlow(avg); return; } } }
     U.uT.value = now / 1000; warmFog();
     try { if (CW.WAKE && CW.WAKE.ok) { feedWake(Math.min(dt, 100) / 1000); CW.WAKE.step(Math.min(dt, 100) / 1000, cam, MW, MH); } ren.render(scene, cam); } catch (e) { fail(e.message); }
@@ -379,6 +395,16 @@ CW.R3 = (function () {
   function bench(n = 30, live = S.live) { if (!ok || !S.last) return null; const keep = U.uLive.value, px = new Uint8Array(4), gl = ren.getContext(); U.uLive.value = live ? 1 : 0;
     ren.render(scene, cam); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now();
     for (let i = 0; i < n; i++) { U.uT.value += .033; ren.render(scene, cam); } gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const ms = (performance.now() - t0) / n; U.uLive.value = keep; return ms; }
+  // ---------- detail levels (living fields piece 4): Low / Medium / High, or Auto (starts Medium, steps down when frames are slow) ----------
+  // Low: wider grass spacing + smaller grass patch, half the shrubs and saplings, more leaf cards dropped on far trees, thinner crop rows, board at 0.8 resolution.
+  const DET = ['Low', 'Medium', 'High'];
+  function applyDetail(lv) { lv = Math.max(0, Math.min(2, lv)); if (lv === U.uDet.value && S.detBuilt) return; U.uDet.value = lv; S.detBuilt = true;
+    if (!ok || !scene) return;
+    if (lv === 0 && S.res > 0.8 && S.dpr0 && S.last) { S.res = 0.8; ren.setPixelRatio(S.dpr0 * S.res); ren.setSize(S.last.w, S.last.h, false); }
+    if (CW.WORLD && CW.WorldGrass && S.occ && S.wg !== undefined) { try { S.wg = CW.WorldGrass.build({ scene, M, W3, occ: S.occ, U, det: lv }); } catch (e) { console.warn('grass skipped:', e.message); } }
+  }   // no render here: the game redraws right after (and the first call comes before the board is sized)
+  function setDetail(name) { const auto = !name || name === 'auto', lv = auto ? (S.detAuto ? U.uDet.value : 1) : name === 'low' ? 0 : name === 'high' ? 2 : 1;
+    if (auto === S.detAuto && lv === U.uDet.value && S.detBuilt) return; S.detAuto = auto; applyDetail(lv); }
   const V = () => new THREE.Vector3();
   // ---------- height field (quarter resolution, bilinear) ----------
   function buildHeights() {
@@ -386,8 +412,46 @@ CW.R3 = (function () {
     x.fillStyle = '#000'; x.fillRect(0, 0, w, h); x.scale(1 / q, 1 / q);
     for (let r = -1; r <= M.rows; r++) for (let cc = -1; cc <= M.cols; cc++) { const c2 = Math.max(0, Math.min(M.cols - 1, cc)), r2 = Math.max(0, Math.min(M.rows - 1, r)), [px, py] = CW.center(cc, r), v = M.h(c2, r2) * 50;
       x.fillStyle = `rgb(${v},${v},${v})`; CW.hexPath(x, px, py, CW.R + 1); x.fill(); }
-    const b = document.createElement('canvas'); b.width = w; b.height = h; const bx = b.getContext('2d'); bx.filter = `blur(${CW.R * .55 / q}px)`; bx.drawImage(c, 0, 0);
+    const b = document.createElement('canvas'); b.width = w; b.height = h; const bx = b.getContext('2d'); bx.filter = `blur(${CW.R * .62 / q}px)`; bx.drawImage(c, 0, 0);
     const d = bx.getImageData(0, 0, w, h).data; HF = new Float32Array(w * h); for (let i = 0; i < HF.length; i++) HF[i] = d[i * 4] / 50 * EX;
+    // terrain pass (17 Oct, visuals only: hex heights and every game rule unchanged). Everything below is a pure function of the map file.
+    // (a) knolls ('k') get a rounded crown on top of their level, so they read as hills from the side
+    const K = CW.R * .85;
+    for (const [hc, hr] of M.all) { if (M.ter(hc, hr) !== 'k') continue; const [px, py] = CW.center(hc, hr);
+      for (let j = Math.max(0, (py - 3 * K) / q | 0); j < Math.min(h, (py + 3 * K) / q + 1); j++) for (let i = Math.max(0, (px - 3 * K) / q | 0); i < Math.min(w, (px + 3 * K) / q + 1); i++) {
+        const dd = ((i + .5) * q - px) ** 2 + ((j + .5) * q - py) ** 2; HF[j * w + i] += EX * .95 * Math.exp(-dd / (2 * K * K)); } }
+    // (b) water: a flat zone around river/ford/bridge/swamp hexes and the brooks (no undulation there), and shallow beds under the water lines
+    const mk = (blur, draw) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const cx = cv.getContext('2d'); cx.fillStyle = '#000'; cx.fillRect(0, 0, w, h);
+      cx.save(); cx.scale(1 / q, 1 / q); draw(cx); cx.restore(); const o = document.createElement('canvas'); o.width = w; o.height = h; const ox = o.getContext('2d'); ox.filter = `blur(${blur}px)`; ox.drawImage(cv, 0, 0);
+      const px = ox.getImageData(0, 0, w, h).data, out = new Float32Array(w * h); for (let i = 0; i < out.length; i++) out[i] = px[i * 4] / 255; cv.width = o.width = 0; return out; };
+    let Wd = null; try { Wd = CW.WORLD && CW.WorldWater ? CW.WorldWater.fromMap(M) : null; } catch (e) { Wd = null; }
+    const lines = (cx, wR, wB) => { if (!Wd) return; cx.lineCap = cx.lineJoin = 'round'; cx.strokeStyle = '#fff';
+      for (const rv of (Wd.rivers || [Wd.river])) if (rv && rv.length > 1) { CW.smoothPath(cx, rv); cx.lineWidth = wR; cx.stroke(); }
+      if (wB > 0) for (const l of (Wd.streams || [])) if (l.length > 1) { cx.beginPath(); l.forEach((p, i) => i ? cx.lineTo(...p) : cx.moveTo(...p)); cx.lineWidth = wB; cx.stroke(); } };
+    const rw = Wd && Wd.rw || CW.R * .46;
+    const flat = mk(CW.R * .45 / q, cx => { cx.fillStyle = '#fff'; for (const [hc, hr] of M.all) if ('wbds'.includes(M.ter(hc, hr))) { CW.hexPath(cx, ...CW.center(hc, hr), CW.R); cx.fill(); } lines(cx, rw * 2.2, 26); });
+    const bedR = mk(2.2, cx => lines(cx, rw * 1.25, 0)), bedB = mk(1.6, cx => { if (!Wd) return; cx.lineCap = cx.lineJoin = 'round'; cx.strokeStyle = '#fff';
+      for (const l of (Wd.streams || [])) if (l.length > 1) { cx.beginPath(); l.forEach((p, i) => i ? cx.lineTo(...p) : cx.moveTo(...p)); cx.lineWidth = 9; cx.stroke(); } });
+    // (c) gentle rolling ground (a few metres, seeded by position: the same map always looks the same) everywhere except near water
+    const hs = (a, b) => { const t = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return t - Math.floor(t); };
+    const vn = (px, py) => { const i = Math.floor(px), j = Math.floor(py); let fx = px - i, fy = py - j; fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+      return (hs(i, j) * (1 - fx) + hs(i + 1, j) * fx) * (1 - fy) + (hs(i, j + 1) * (1 - fx) + hs(i + 1, j + 1) * fx) * fy; };
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const k = j * w + i, X = (i + .5) * q, Y = (j + .5) * q;
+      const u = vn(X / 300 + 3.1, Y / 300 + 7.7) * .6 + vn(X / 120 + 11.3, Y / 120 + 2.9) * .3 + vn(X / 47, Y / 47 + 5.5) * .1;
+      HF[k] += (u - .5) * 2 * 8 * (1 - Math.min(1, flat[k] * 1.6)) - 6 * Math.min(1, bedR[k] * 1.4) - 2.6 * Math.min(1, bedB[k] * 1.4); }
+    // (d) relief = height minus the land around it (~2 hexes): >0 crests and knoll tops, <0 hollows. Plus wetness. One small texture for the ground + grass shaders.
+    const bl = (src, rad) => { const a = Float32Array.from(src), t = new Float32Array(src.length);
+      for (let pass = 0; pass < 3; pass++) { for (let j = 0; j < h; j++) { let acc = 0; const o = j * w; for (let i = -rad; i <= rad; i++) acc += a[o + Math.max(0, Math.min(w - 1, i))];
+          for (let i = 0; i < w; i++) { t[o + i] = acc / (2 * rad + 1); acc += a[o + Math.min(w - 1, i + rad + 1)] - a[o + Math.max(0, i - rad)]; } }
+        for (let i = 0; i < w; i++) { let acc = 0; for (let j = -rad; j <= rad; j++) acc += t[Math.max(0, Math.min(h - 1, j)) * w + i];
+          for (let j = 0; j < h; j++) { a[j * w + i] = acc / (2 * rad + 1); acc += t[Math.min(h - 1, j + rad + 1) * w + i] - t[Math.max(0, j - rad) * w + i]; } } }
+      return a; };
+    const wl = mk(CW.R * .5 / q, cx => lines(cx, rw * 2.6, 34)), big = bl(HF, Math.round(CW.R * 1.6 / q / 1.7)), wet = bl(wl, 4),   // wetness spreads from the water lines, not from whole hexes
+      rel = new Uint8Array(w * h * 4), hg = new Uint16Array(w * h * 4), half = THREE.DataUtils.toHalfFloat;
+    for (let i = 0; i < HF.length; i++) { rel[i * 4] = Math.max(0, Math.min(255, 128 + (HF[i] - big[i]) / (EX * 1.1) * 127)); rel[i * 4 + 1] = Math.min(255, wet[i] * 330); rel[i * 4 + 3] = 255; hg[i * 4] = half(HF[i]); hg[i * 4 + 3] = half(1); }
+    const T = (data, type) => { const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, type); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; return t; };
+    if (U.uRelief.value) U.uRelief.value.dispose(); if (U.uHgt.value) U.uHgt.value.dispose();
+    S.hMin = HF.reduce((a, v) => Math.min(a, v), 0); U.uRelief.value = T(rel, THREE.UnsignedByteType); U.uHgtSz.value.set(w * q, h * q); U.uHgt.value = T(hg, THREE.HalfFloatType);
   }
   const hAt = (x, y) => { const fx = Math.max(0, Math.min(HW - 1.001, x / 4)), fy = Math.max(0, Math.min(HH - 1.001, y / 4)), ix = fx | 0, iy = fy | 0, tx = fx - ix, ty = fy - iy, i = iy * HW + ix;
     return (HF[i] * (1 - tx) + HF[i + 1] * tx) * (1 - ty) + (HF[i + HW] * (1 - tx) + HF[i + HW + 1] * tx) * ty; };
@@ -421,7 +485,7 @@ CW.R3 = (function () {
       decal.renderOrder = 2; scene.add(decal);
       // land beyond the board so the edge sits on countryside, not in a void
       const skirt = new THREE.Mesh(new THREE.PlaneGeometry(MW * 8, MH * 8), living(new THREE.MeshStandardMaterial({ color: 0x6f6a3e, roughness: 1 }), false));
-      skirt.rotateX(-Math.PI / 2); skirt.position.y = -2; skirt.receiveShadow = true; scene.add(skirt); S.skirt = skirt;
+      skirt.rotateX(-Math.PI / 2); skirt.position.y = Math.min(-2, (S.hMin || 0) - 3);   // always under the lowest river bed skirt.receiveShadow = true; scene.add(skirt); S.skirt = skirt;
       // light: low golden-hour sun from the west, plus sky fill
       scene.add(new THREE.HemisphereLight(0xcfdcec, 0x6a5a3a, 1.0));
       const sun = new THREE.DirectionalLight(0xffdcb4, 3.6); sun.position.set(-1000, 300, 300); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
@@ -469,5 +533,5 @@ CW.R3 = (function () {
   const tilt = dv => { S.tilt = Math.max(TILT_MIN, Math.min(TILT_MAX, S.tilt + dv)); return S.tilt; };
   function sweep(gc, fitZ, redraw) { if (!ok) return; S.anim = { t0: performance.now(), dur: 3200, tilt: 32, z: Math.min(gc.z, fitZ * .75) };
     const loop = () => { redraw(); if (S.anim) requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
-  return { init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, bench, snap, onSlow: f => { S.onSlow = f; }, wakeSource: f => { S.src = f; }, wade: (x0, y0, x1, y1, s) => { if (S.live && CW.WAKE && CW.WAKE.ok) CW.WAKE.trail(x0, y0, x1, y1, s * WAKE_S); }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get renderer() { return ren; }, get threads() { return S.threads; }, get ribbon() { return S.ribbon; }, get camera() { return cam; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
+  return { init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, setDetail, get detail() { return (S.detAuto ? 'auto:' : '') + DET[U.uDet.value]; }, bench, snap, onSlow: f => { S.onSlow = f; }, wakeSource: f => { S.src = f; }, wade: (x0, y0, x1, y1, s) => { if (S.live && CW.WAKE && CW.WAKE.ok) CW.WAKE.trail(x0, y0, x1, y1, s * WAKE_S); }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get renderer() { return ren; }, get threads() { return S.threads; }, get ribbon() { return S.ribbon; }, get camera() { return cam; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
 })();

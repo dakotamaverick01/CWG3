@@ -1,5 +1,5 @@
 # BRIEF: Terrain A — height look (est. ~2% usage)
-Status: READY. Written 11 Oct 2026 (chat plan, John's answers). Run in a fresh Claude Code session. Read CLAUDE.md, then ops/TERRAIN_RULES.md, then this file. Do piece A only.
+Status: DONE 17 Oct (see STATUS.md, 2026-10-17). Written 11 Oct 2026 (chat plan, John's answers). Run in a fresh Claude Code session. Read CLAUDE.md, then ops/TERRAIN_RULES.md, then this file. Do piece A only.
 
 ## Goal
 Make the valley's ground read as land with slopes: shading and contours so real height is visible. No new models yet.

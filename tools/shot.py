@@ -47,6 +47,7 @@ def main():
             pg.locator('select:visible').first.select_option(label='Union (valley, west)')
             pg.evaluate("() => { const b=[...document.querySelectorAll('button')].find(x=>x.offsetParent && /begin/i.test(x.textContent)); b.click(); }")
             pg.wait_for_timeout(15000)
+            pg.add_style_tag(content='#coach{display:none!important}')   # hide the help pop-up so it doesn't cover the shots
             for v in views:
                 if v.startswith('bench'):   # 'bench' or 'bench,live': ms per frame at the current view (relative numbers only)
                     print('bench', v, pg.evaluate(f"() => CW.R3.bench(30, {'true' if 'live' in v else 'false'})")); continue

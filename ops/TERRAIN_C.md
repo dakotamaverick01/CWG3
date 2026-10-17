@@ -1,5 +1,5 @@
 # BRIEF: Terrain C — vegetation follows the slope (est. ~1% usage)
-Status: READY, run AFTER Terrain B and after the living-fields pieces (trees/grass). Read CLAUDE.md, ops/TERRAIN_RULES.md, then this file. Do piece C only.
+Status: DONE 17 Oct (see STATUS.md, 2026-10-17). Read CLAUDE.md, ops/TERRAIN_RULES.md, then this file. Do piece C only.
 
 ## Goal
 Trees, grass and crops sit on the slope: no floating on hilltops, no sinking into hillsides.

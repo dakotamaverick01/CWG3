@@ -9,7 +9,7 @@
 // Wind: the world gust (CW.WorldTrees.WIND) only while Living is on; off = frozen. Under unit-occupied hexes the blades lie flatter.
 CW.WorldGrass = (function () {
   const S = 600, SP = 2.5, NB = 5, Q = 4;   // lattice square (map px), tuft spacing, blades per tuft, data texture cell (px)
-  const DENS = { g: [1, 0, 0], o: [.7, 0, 0], h: [.3, 0, 0], t: [.3, 0, 0], f: [.25, 0, 1], s: [1, 1, 0], x: [.3, 0, 0] };
+  const DENS = { g: [1, 0, 0], o: [.7, 0, 0], h: [.3, 0, 0], t: [.3, 0, 0], f: [.25, 0, 1], s: [1, 1, 0], x: [.3, 0, 0], w: [.9, .5, 0], b: [.6, 0, 0], d: [.8, .4, 0] };   // river hexes: grass to the bank (the water itself is cut out below)
 
   // one tuft (or reed clump): per vertex aB = (base x, base z, t along the blade, side -1/1, 0 = tip), aD = (lean angle, height, width, kind 0 blade 1 flower 2 cattail head)
   function tuft(reed, seed, crop) {
@@ -33,7 +33,7 @@ CW.WorldGrass = (function () {
   }
 
   const VS = `attribute vec4 aB, aD; attribute vec2 aOff;
-    uniform vec2 uCen, uMap, uOccN; uniform float uS, uZoom, uT, uLive, uWrap, uReed, uCrop; uniform sampler2D uGD, uHex, uOcc; varying vec3 vCol; varying float vDist;
+    uniform vec2 uCen, uMap, uOccN, uHgtSz; uniform float uS, uSP, uZoom, uT, uLive, uWrap, uReed, uCrop, uDetG; uniform sampler2D uGD, uHex, uOcc, uRelief; varying vec3 vCol; varying float vDist;
     ${CW.WorldTrees.WIND}
     const vec3 SUN = vec3(-0.5, 0.75, 0.25);
     float h1(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -41,12 +41,13 @@ CW.WorldGrass = (function () {
       return mix(mix(h1(i), h1(i + vec2(1.0, 0.0)), f.x), mix(h1(i + vec2(0.0, 1.0)), h1(i + vec2(1.0, 1.0)), f.x), f.y); }
     void main() {
       vec2 p = aOff;
-      if (uWrap > 0.5) { p = aOff + uS * floor((uCen - aOff) / uS + 0.5); p += (vec2(h1(p), h1(p + 7.3)) - 0.5) * ${SP.toFixed(2)}; }
-      vec2 uv = (p + uMap * 0.5) / uMap; vec4 gd = texture2D(uGD, uv);   // r height, g grass density, b tall wet grass, a forest floor
+      if (uWrap > 0.5) { p = aOff + uS * floor((uCen - aOff) / uS + 0.5); p += (vec2(h1(p), h1(p + 7.3)) - 0.5) * uSP; }
+      vec2 uv = (p + uMap * 0.5) / uMap; vec4 gd = texture2D(uGD, uv); vec4 rl = texture2D(uRelief, (p + uMap * 0.5) / uHgtSz); float rel = rl.r * 2.0 - 1.0;   // relief: crests dry, hollows lush. gd: r height, g grass density, b tall wet grass, a forest floor
       float r1 = h1(p * 1.37), r2 = h1(p * 0.71 + 3.1), r3 = h1(p * 2.11 + 9.7), k = smoothstep(1.7, 2.6, uZoom);
       if (uWrap > 0.5 && uCrop < 0.5) { if (r1 > gd.g * (0.55 + 0.9 * vn(p / 23.0))) k = 0.0; k *= 1.0 - smoothstep(uS * 0.36, uS * 0.5, length(p - uCen)); }
+      if (uCrop > 0.5 && uDetG < 0.5 && r1 < 0.33) k = 0.0;   // Low detail: thinner crop rows
       bool fl = aD.w > 0.5 && aD.w < 1.5;
-      if (fl && (r3 > 0.022 || gd.b > 0.5 || gd.a > 0.5)) k = 0.0;
+      if (fl && (r3 > 0.006 + 0.08 * smoothstep(0.6, 0.86, vn(p / 170.0 + 11.0)) || gd.b > 0.5 || gd.a > 0.5)) k = 0.0;
       if (k < 0.02) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
       vec2 hx = floor(texture2D(uHex, uv).rg * 255.0 + 0.5); float occ = step(0.5, texture2D(uOcc, (hx + 0.5) / uOccN).r) * (1.0 - uReed);
       float H = (uCrop > 1.5 ? 10.0 : uCrop > 0.5 ? 4.6 : uReed > 0.5 ? 8.0 : 3.0) * mix(1.0, 1.8, gd.b) * mix(1.0, 0.6, gd.a) * (0.65 + 0.7 * r2) * aD.y * k;
@@ -60,15 +61,15 @@ CW.WorldGrass = (function () {
       vec3 wp = vec3(p.x + rot.x + bend.x, gd.r + y - 0.15, p.y + rot.y + bend.y);
       if (fl) { float c = aB.w; wp += vec3((c == 1.0 || c == 2.0) ? 0.4 : -0.4, 0.15, c >= 2.0 ? 0.4 : -0.4); } else wp.xz += perp * w * aB.w;
       // colour: dark foot -> sunlit tip, lush and dry patches, shade under the forest, bluer wet grass; light from the low western sun
-      float dry = smoothstep(0.5, 0.85, vn(p / 61.0 + 3.0)) * 0.75 + 0.25 * smoothstep(0.6, 0.9, vn(p / 13.0));
+      float dry = clamp(smoothstep(0.5, 0.85, vn(p / 61.0 + 3.0)) * 0.75 + 0.25 * smoothstep(0.6, 0.9, vn(p / 13.0)) + 0.7 * smoothstep(0.04, 0.55, rel), 0.0, 1.0);
       vec3 tip = mix(vec3(0.115, 0.19, 0.035), vec3(0.30, 0.25, 0.075), dry) * (0.82 + 0.36 * r2);
-      tip = mix(tip, vec3(0.07, 0.15, 0.06), gd.b * 0.7);
+      tip = mix(tip, vec3(0.07, 0.15, 0.06), gd.b * 0.7); tip = mix(tip, vec3(0.07, 0.155, 0.04), clamp(max(smoothstep(0.04, 0.5, -rel), rl.g * 0.7), 0.0, 1.0) * 0.5);
       vec3 col = mix(vec3(0.022, 0.036, 0.008), tip, pow(t, 0.7));
       if (uReed > 0.5) col = mix(vec3(0.035, 0.05, 0.015), vec3(0.24, 0.29, 0.09) * (0.8 + 0.4 * r2), pow(t, 0.6));
       if (aD.w > 1.5 && aD.w < 2.5) col = vec3(0.19, 0.09, 0.035) * (0.8 + 0.3 * t);
       if (uCrop > 0.5 && uCrop < 1.5) col = mix(vec3(0.07, 0.06, 0.015), vec3(0.50, 0.35, 0.09) * (0.85 + 0.3 * r2), pow(t, 0.6)) * mix(1.0, 0.8, smoothstep(0.55, 0.9, vn(p / 40.0)));
       if (uCrop > 1.5) col = aD.w > 3.5 && aD.w < 4.5 ? vec3(0.40, 0.31, 0.12) : mix(vec3(0.02, 0.04, 0.01), vec3(0.10, 0.21, 0.04) * (0.8 + 0.4 * r2), pow(t, 0.6));
-      if (fl) col = r2 < 0.4 ? vec3(0.85, 0.83, 0.72) : r2 < 0.75 ? vec3(0.9, 0.62, 0.05) : vec3(0.38, 0.14, 0.55);
+      float fk = mix(r2, vn(p / 55.0 + 4.0), 0.75); if (fl) col = fk < 0.4 ? vec3(0.85, 0.83, 0.72) : fk < 0.75 ? vec3(0.9, 0.62, 0.05) : vec3(0.38, 0.14, 0.55);
       vec3 V = normalize(cameraPosition - wp); float face = 0.85 + 0.3 * dot(perp, normalize(SUN.xz)) * aB.w * 0.5;
       float back = pow(clamp(dot(-V, normalize(SUN)), 0.0, 1.0), 3.0) * t;
       col = col * (0.62 + 0.55 * face) * mix(1.0, 0.5, gd.a) + col * vec3(0.9, 1.0, 0.3) * back * 0.8;
@@ -89,6 +90,7 @@ CW.WorldGrass = (function () {
     (M.roads || []).forEach(rd => { CW.smoothPath(a, rd.p.map(p => CW.center(...p))); a.lineWidth = rd.major ? 15 : 11; a.stroke(); });
     const water = CW.WorldWater ? CW.WorldWater.fromMap(M) : { streams: [] };
     water.streams.forEach(l => { a.beginPath(); l.forEach((p, i) => i ? a.lineTo(...p) : a.moveTo(...p)); a.lineWidth = 7; a.stroke(); });
+    (water.rivers || []).forEach(l => { if (l && l.length > 1) { CW.smoothPath(a, l); a.lineWidth = (water.rw || CW.R * .92) * 1.08; a.stroke(); } });
     const px = a.getImageData(0, 0, w, h).data; A.width = A.height = 0; A = null;
     const half = THREE.DataUtils.toHalfFloat, gd = new Uint16Array(w * h * 4), hgt = new Float32Array(w * h), hex = new Uint8Array(w * h * 4);
     const HW = CW.HW, R = CW.R;
@@ -145,10 +147,11 @@ CW.WorldGrass = (function () {
   // env: { scene, M, W3, occ, U }
   function build(env) {
     const { scene, M, W3, occ, U } = env, [MW, MH] = CW.mapSize(M); dispose();
-    const D = mapData(M, W3, MW, MH), n = Math.round(S / SP), lat = new Float32Array(n * n * 2);
+    const det = env.det === undefined ? 1 : env.det, SP = [3.3, 2.85, 2.5][det], Sz = [440, 540, 600][det];   // detail level: tuft spacing and lattice size
+    const D = mapData(M, W3, MW, MH), n = Math.round(Sz / SP), lat = new Float32Array(n * n * 2);
     let q = 0; for (let m = 0; m < n; m++) for (let j = 0; j <= m; j++) for (let i = 0; i <= m; i++) if (Math.max(i, j) === m) lat.set([(i + .5) * SP, (j + .5) * SP], 2 * q++);   // square shells: the first m*m tufts make an m x m square
     const base = { uGD: { value: D.T1 }, uHex: { value: D.T2 }, uOcc: { value: occ }, uOccN: { value: new THREE.Vector2(M.cols, M.rows) }, uMap: { value: new THREE.Vector2(MW, MH) },
-      uCen: { value: new THREE.Vector2() }, uS: { value: S }, uZoom: { value: 3 }, uT: U.uT, uLive: U.uLive, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
+      uCen: { value: new THREE.Vector2() }, uS: { value: Sz }, uSP: { value: SP }, uDetG: U.uDet || { value: 1 }, uRelief: U.uRelief, uHgtSz: U.uHgtSz, uZoom: { value: 3 }, uT: U.uT, uLive: U.uLive, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
     const grass = mesh(tuft(false, 99), lat, Object.assign({}, base, { uWrap: { value: 1 }, uReed: { value: 0 }, uCrop: { value: 0 } }));
     const rs = reedSpots(M, D.water, MW, MH), reeds = rs.length ? mesh(tuft(true, 77), rs, Object.assign({}, base, { uWrap: { value: 0 }, uReed: { value: 1 }, uCrop: { value: 0 } })) : null;
     const geoW = tuft(false, 55, 1), geoC = tuft(false, 66, 2), crops = cropHexes(M, MW, MH).map(h => {

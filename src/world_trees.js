@@ -61,9 +61,10 @@ CW.WorldTrees = (function () {
   const WIND = `const vec2 WDIR = vec2(0.866, 0.5);
     float cwGust(vec2 p, float t) { float s = dot(p, WDIR) / 300.0 - t * 0.28 + 0.9 * sin(dot(p, vec2(-WDIR.y, WDIR.x)) / 520.0 + t * 0.05);
       float g = 0.5 + 0.5 * sin(s * 6.2832); return g * g * (0.75 + 0.25 * sin(t * 0.37 + p.x * 0.002)); }`;
-  const HEAD = `attribute vec3 aBase; attribute vec4 aPar; attribute vec2 aSc; uniform sampler2D uOcc; uniform vec2 uOccN; uniform float uT, uLive, uH;
+  const HEAD = `attribute vec3 aBase; attribute vec4 aPar; attribute vec2 aSc; uniform sampler2D uOcc; uniform vec2 uOccN; uniform float uT, uLive, uH, uDet, uUnder;
     ${WIND}
-    float occK() { float hx = aPar.z; float o = texture2D(uOcc, (vec2(mod(hx, uOccN.x), floor(hx / uOccN.x)) + 0.5) / uOccN).r; return o > 0.5 ? (aPar.y < 0.5 ? 0.0 : 0.62) : 1.0; }
+    float occK() { if (uUnder > 0.5 && uDet < 0.5 && fract(aPar.y * 5.3) < 0.5) return 0.0;   // Low detail: half the shrubs and saplings
+      float hx = aPar.z; float o = texture2D(uOcc, (vec2(mod(hx, uOccN.x), floor(hx / uOccN.x)) + 0.5) / uOccN).r; return o > 0.5 ? (aPar.y < 0.5 ? 0.0 : 0.62) : 1.0; }
     vec3 rotY(vec3 v) { float c = cos(aPar.x), s = sin(aPar.x); return vec3(v.x * c + v.z * s, v.y, -v.x * s + v.z * c); }
     // sway: whole tree leans with the gust by wind weight^2 (trunk foot 0 -> twig tips 1); a little side-to-side sine on top
     vec3 sway(float wt, float H) { if (uLive < 0.5) return vec3(0.0); float g = cwGust(aBase.xz, uT), ph = aPar.y * 6.283;
@@ -87,6 +88,9 @@ CW.WorldTrees = (function () {
     }`;
   const LVS = `${HEAD} attribute vec4 aL; varying vec2 vUv; varying vec3 vN, vW, vTint; varying float vAo, vDist;
     void main() { float k = occK(); if (k <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+      // detail levels (piece 4): far trees draw fewer leaf cards (each card has its own random aL.z; the inner ones barely show from outside)
+      float dc = length(cameraPosition - aBase), fr = uDet > 1.5 ? 0.30 * smoothstep(900.0, 1700.0, dc) : uDet > 0.5 ? 0.45 * smoothstep(550.0, 1150.0, dc) : 0.25 + 0.35 * smoothstep(450.0, 950.0, dc);
+      if (aL.z < fr) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
       vec3 l = rotY(vec3(position.x * aSc.x, position.y * aSc.y, position.z * aSc.x)) * k; float H = uH * aSc.y * k; vec3 n = rotY(normal);
       vec3 w = aBase + l + sway(aL.x, H);
       if (uLive > 0.5) w += n * aSc.x * 0.09 * aL.x * sin(uT * 6.5 + aL.z * 40.0 + position.y) * (0.3 + cwGust(aBase.xz, uT));   // leaf flutter
@@ -106,12 +110,13 @@ CW.WorldTrees = (function () {
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`;
-  const SVS = `attribute vec3 aBase, aShd; attribute vec4 aPar; uniform sampler2D uOcc; uniform vec2 uOccN; varying vec2 vQ; varying float vA;
+  const SVS = `attribute vec3 aBase, aShd; attribute vec4 aPar; uniform sampler2D uOcc, uHgt; uniform vec2 uOccN, uHgtSz, uMapW; varying vec2 vQ; varying float vA;
     void main() { float hx = aPar.z; float o = texture2D(uOcc, (vec2(mod(hx, uOccN.x), floor(hx / uOccN.x)) + 0.5) / uOccN).r; float k = o > 0.5 ? (aPar.y < 0.5 ? 0.0 : 0.62) : 1.0;
       if (k <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
       vec2 c = position.xy, dir = normalize(vec2(1.0, -0.45)), side = vec2(-dir.y, dir.x); float R = aShd.x * k, Hc = aShd.y * k, Lh = R * 1.05 + Hc * 0.45;
       vec2 p = dir * (Hc * 0.62 + c.x * 2.0 * Lh) + side * c.y * 2.0 * R * 1.05;   // from under the trunk to well east of it (low western sun)
-      vQ = c * 2.0; vA = aShd.z; gl_Position = projectionMatrix * viewMatrix * vec4(aBase + vec3(p.x, 0.9, p.y), 1.0); }`;
+      vQ = c * 2.0; vA = aShd.z; vec2 wp = aBase.xz + p; float gy = texture2D(uHgt, (wp + uHgtSz * 0.5 - (uHgtSz - uMapW) * 0.5) / uHgtSz).r;
+      gl_Position = projectionMatrix * viewMatrix * vec4(wp.x, gy + 0.9, wp.y, 1.0); }`;
   const SFS = `varying vec2 vQ; varying float vA; void main() { float d = length(vQ); gl_FragColor = vec4(0.08, 0.07, 0.12, (1.0 - smoothstep(0.25, 1.0, d)) * vA); }`;
 
   const dec = (s, T) => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new T(u.buffer); };
@@ -126,12 +131,12 @@ CW.WorldTrees = (function () {
     const TS = CW.TREES, parts = [], groups = new Map(), [gc, gr] = TS.grid;
     list.forEach(t => { const k = t.sp + ':' + t.v; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); });
     const inst = items => { const n = items.length, base = new Float32Array(n * 3), par = new Float32Array(n * 4), sc = new Float32Array(n * 2);
-      items.forEach((t, i) => { const b = W3(t.x, t.y); base.set([b.x, b.y - .5, b.z], i * 3); par.set([t.yaw, t.rnd, t.hex, 0], i * 4); sc.set([t.s, t.sy], i * 2); });
+      items.forEach((t, i) => { const b = W3(t.x, t.y), lo = Math.min(b.y, W3(t.x + 3, t.y).y, W3(t.x - 3, t.y).y, W3(t.x, t.y + 3).y, W3(t.x, t.y - 3).y); base.set([b.x, lo - .5, b.z], i * 3); par.set([t.yaw, t.rnd, t.hex, 0], i * 4); sc.set([t.s, t.sy], i * 2); });
       return { n, base: new THREE.InstancedBufferAttribute(base, 3), par: new THREE.InstancedBufferAttribute(par, 4), sc: new THREE.InstancedBufferAttribute(sc, 2) }; };
     const geo = (I, attrs, idx) => { const g = new THREE.InstancedBufferGeometry(); for (const [k, a] of Object.entries(attrs)) g.setAttribute(k, a); g.setIndex(new THREE.BufferAttribute(idx, 1));
       g.setAttribute('aBase', I.base); g.setAttribute('aPar', I.par); g.setAttribute('aSc', I.sc); g.instanceCount = I.n; return g; };
     for (const [key, items] of groups) {
-      const [sp, v] = key.split(':'), m = TS.species[sp][+v], I = inst(items), own = { uH: { value: m.h }, uCb: { value: m.hc * .6 } };
+      const [sp, v] = key.split(':'), m = TS.species[sp][+v], I = inst(items), own = { uH: { value: m.h }, uCb: { value: m.hc * .6 }, uUnder: { value: sp === 'shrub' || sp === 'sapling' ? 1 : 0 } };
       const bark = new THREE.Mesh(geo(I, { position: new THREE.BufferAttribute(dec(m.bp, Float32Array), 3), normal: new THREE.BufferAttribute(dec(m.bn, Int8Array), 3, true),
         aC: new THREE.BufferAttribute(dec(m.bc, Uint8Array), 4, true) }, dec(m.bi, Uint16Array)),
         new THREE.ShaderMaterial({ vertexShader: BVS, fragmentShader: BFS, uniforms: Object.assign({}, shared, own), side: THREE.DoubleSide }));
@@ -149,7 +154,7 @@ CW.WorldTrees = (function () {
       shd.set([Math.max(1.2, m.r) * t.s, m.hc * t.sy, t.sh], i * 3); });
     const sg = new THREE.InstancedBufferGeometry(), q = new THREE.PlaneGeometry(1, 1); sg.index = q.index; sg.setAttribute('position', q.attributes.position);
     sg.setAttribute('aBase', new THREE.InstancedBufferAttribute(base, 3)); sg.setAttribute('aPar', new THREE.InstancedBufferAttribute(par, 4)); sg.setAttribute('aShd', new THREE.InstancedBufferAttribute(shd, 3)); sg.instanceCount = n;
-    const sh = new THREE.Mesh(sg, new THREE.ShaderMaterial({ vertexShader: SVS, fragmentShader: SFS, uniforms: { uOcc: shared.uOcc, uOccN: shared.uOccN },
+    const sh = new THREE.Mesh(sg, new THREE.ShaderMaterial({ vertexShader: SVS, fragmentShader: SFS, uniforms: { uOcc: shared.uOcc, uOccN: shared.uOccN, uHgt: shared.uHgt || { value: null }, uHgtSz: shared.uHgtSz || { value: new THREE.Vector2(1, 1) }, uMapW: shared.uMapW || { value: new THREE.Vector2(1, 1) } },
       transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide }));
     sh.frustumCulled = false; sh.renderOrder = 1; scene.add(sh); parts.push(sh);
     return parts;
@@ -158,9 +163,11 @@ CW.WorldTrees = (function () {
   // env: { scene, M, W3 (map px -> world), occ (DataTexture of unit-occupied hexes), U (shared uniforms uT, uLive) }
   function build(env) {
     const { scene, M, W3, occ, U } = env; if (!CW.TREES) throw new Error('trees.js missing');
-    dispose(); const list = place(M);
+    dispose(); const sl = (x, y) => Math.hypot(W3(x + 4, y).y - W3(x - 4, y).y, W3(x, y + 4).y - W3(x, y - 4).y) / 8;
+    const list = place(M).filter(t => { const g = sl(t.x, t.y); return g < .45 || t.rnd > Math.min(.85, (g - .45) * 2.2); });   // terrain C: steep hillsides carry fewer trees
     const shared = { uOcc: { value: occ }, uOccN: { value: new THREE.Vector2(M.cols, M.rows) }, uT: U.uT, uLive: U.uLive,
-      uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
+      uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) },
+      uDet: U.uDet || { value: 1 }, uUnder: { value: 0 }, uHgt: U.uHgt, uHgtSz: U.uHgtSz, uMapW: { value: new THREE.Vector2(...CW.mapSize(M)) } };
     state = { scene, parts: draw(scene, list, W3, shared) }; return list.length;
   }
   let state = null;
