@@ -43,9 +43,9 @@ CW.WorldGrass = (function () {
       vec2 p = aOff;
       if (uWrap > 0.5) { p = aOff + uS * floor((uCen - aOff) / uS + 0.5); p += (vec2(h1(p), h1(p + 7.3)) - 0.5) * uSP; }
       vec2 uv = (p + uMap * 0.5) / uMap; vec4 gd = texture2D(uGD, uv); vec4 rl = texture2D(uRelief, (p + uMap * 0.5) / uHgtSz); float rel = rl.r * 2.0 - 1.0;   // relief: crests dry, hollows lush. gd: r height, g grass density, b tall wet grass, a forest floor
-      float r1 = h1(p * 1.37), r2 = h1(p * 0.71 + 3.1), r3 = h1(p * 2.11 + 9.7), k = smoothstep(1.7, 2.6, uZoom);
+      float r1 = h1(p * 1.37), r2 = h1(p * 0.71 + 3.1), r3 = h1(p * 2.11 + 9.7), k = uCrop > 0.5 ? 1.0 : smoothstep(1.7, 2.6, uZoom);   // crops stay full height at every zoom they draw at (17 Oct: they used to shrink away below 2.6)
       if (uWrap > 0.5 && uCrop < 0.5) { if (r1 > gd.g * (0.55 + 0.9 * vn(p / 23.0))) k = 0.0; k *= 1.0 - smoothstep(uS * 0.36, uS * 0.5, length(p - uCen)); }
-      if (uCrop > 0.5 && uDetG < 0.5 && r1 < 0.33) k = 0.0;   // Low detail: thinner crop rows
+      if (uCrop > 0.5 && r1 < (uDetG < 0.5 ? 0.33 : 0.0) + 0.45 * (1.0 - smoothstep(0.9, 1.8, uZoom))) k = 0.0;   // fewer (wider) tufts when zoomed out; Low detail thinner rows
       bool fl = aD.w > 0.5 && aD.w < 1.5;
       if (fl && (r3 > 0.006 + 0.08 * smoothstep(0.6, 0.86, vn(p / 170.0 + 11.0)) || gd.b > 0.5 || gd.a > 0.5)) k = 0.0;
       if (k < 0.02) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
@@ -57,6 +57,7 @@ CW.WorldGrass = (function () {
       if (uLive > 0.5) { float g = cwGust(p, uT); bend += WDIR * H * tt * tt * (0.42 * g + 0.07 * sin(uT * 2.3 + r1 * 6.283)) * (uReed > 0.5 ? 0.5 : uCrop > 1.5 ? 0.45 : uCrop > 0.5 ? 1.5 : 1.0); }
       float y = H * tt * mix(1.0, 0.3, occ);
       float w = uCrop > 0.5 && uCrop < 1.5 ? (t < 0.5 ? 0.06 : 0.34) : aD.w > 1.5 && aD.w < 2.5 ? 0.30 : 0.26 * aD.z * (1.0 - 0.85 * t) * (uReed > 0.5 ? 0.8 : 1.0);
+      if (uCrop > 0.5) w *= 1.0 + 1.6 * (1.0 - smoothstep(0.9, 2.2, uZoom));   // zoomed out: wider stalks so the field stays full, no sub-pixel shimmer
       vec2 rot = vec2(aB.x * cos(r3 * 6.2832) - aB.y * sin(r3 * 6.2832), aB.x * sin(r3 * 6.2832) + aB.y * cos(r3 * 6.2832));
       vec3 wp = vec3(p.x + rot.x + bend.x, gd.r + y - 0.15, p.y + rot.y + bend.y);
       if (fl) { float c = aB.w; wp += vec3((c == 1.0 || c == 2.0) ? 0.4 : -0.4, 0.15, c >= 2.0 ? 0.4 : -0.4); } else wp.xz += perp * w * aB.w;
@@ -167,7 +168,7 @@ CW.WorldGrass = (function () {
       ren.getSize(sz); const zoom = sz.y / (2 * Math.hypot(x - o.x, y - o.y, z - o.z) * Math.tan(cam.fov * Math.PI / 360));
       base.uCen.value.set(x, z); base.uZoom.value = zoom;
       const E = Math.hypot(sz.x / 2, sz.y / 2 / Math.max(.4, -f.y)) / zoom * 1.25, m = Math.min(n, Math.ceil(2 * E / SP));   // only as much lattice as the screen shows
-      base.uS.value = m * SP; grass.geometry.instanceCount = m * m; grass.visible = on && zoom > 1.7; if (reeds) reeds.visible = on && zoom > 1.7; crops.forEach(c => { c.visible = on && zoom > 1.7; }); };
+      base.uS.value = m * SP; grass.geometry.instanceCount = m * m; grass.visible = on && zoom > 1.7; if (reeds) reeds.visible = on && zoom > 1.7; crops.forEach(c => { c.visible = on && zoom > [1.25, 0.8, 0.7][det]; }); /* crops stay 3D down to the usual play zoom (1.0) */ };
     state = { scene, parts: [grass, reeds, ...crops].filter(Boolean), tex: [D.T1, D.T2], prev };
     return n * n + rs.length / 2;
   }

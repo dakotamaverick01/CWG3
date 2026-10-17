@@ -50,6 +50,7 @@ CW.R3 = (function () {
       return mix(cwT(L, p / 215.0, 0.4 + L * 0.9), cwT(L, p / 265.0 + vec2(0.37, 0.61) * (L + 1.0), 2.1 + L * 1.3), k); }
     vec3 cwLayer(int i, vec2 p) {
       if (i == 0) return mix(cwTile(0.0, p) * vec3(0.78, 1.52, 0.50), cwTile(1.0, p) * vec3(0.56, 1.12, 0.37), smoothstep(0.42, 0.62, cwF(p / 650.0)));   // CC0 photos are yellow-brown: tint toward green   // two meadows, swapped by large noise
+      if (i == 1) return cwTile(2.0, p) * vec3(2.55, 2.5, 2.6);                                          // wheat ground: matched to the 3D wheat (17 Oct, measured: it was ~2.3x darker)
       if (i == 3) return cwTile(4.0, p) * vec3(0.80, 0.90, 0.64);                                         // woods floor in the trees' shade
       return cwTile(float(i + 1), p); }
     vec3 cwGround(vec2 p) {
