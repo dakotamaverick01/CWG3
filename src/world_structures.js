@@ -165,12 +165,12 @@ CW.WorldStructures = (function () {
   const PVS = `attribute vec3 aBase; attribute vec2 aSeed; uniform float uT, uLive; varying float vA; varying vec2 vUV;
     void main() {
       float t = fract((uLive > 0.5 ? uT * 0.05 : 0.0) + aSeed.x);
-      vec3 c = aBase + vec3(t * t * 26.0 + sin(t * 6.0 + aSeed.y * 9.0) * 1.5, t * 30.0, -t * t * 9.0);
+      vec3 c = aBase + vec3(0.866 * t * t * 28.0 + sin(t * 6.0 + aSeed.y * 9.0) * 1.5, t * 30.0, 0.5 * t * t * 28.0);   /* first-look: drifts with the world wind (east-south-east), like the grass */
       float size = 1.6 + t * 8.5; vec4 mv = viewMatrix * vec4(c, 1.0); mv.xy += position.xy * size;
       vA = smoothstep(0.0, 0.10, t) * (1.0 - t) * (0.30 + 0.15 * aSeed.y); vUV = position.xy * 2.0;
       gl_Position = projectionMatrix * mv; }`;
   const PFS = `varying float vA; varying vec2 vUV;
-    void main() { float d = length(vUV); float a = vA * (1.0 - smoothstep(0.25, 1.0, d)); if (a < 0.004) discard; gl_FragColor = vec4(0.64, 0.64, 0.68, a); }`;
+    void main() { float d = length(vUV); float a = vA * (1.0 - smoothstep(0.25, 1.0, d)); if (a < 0.004) discard; gl_FragColor = vec4(0.70, 0.69, 0.69, a); }`;
   function smoke(list, U) {
     const MD = CW.MODELS, pts = [];
     for (const o of list) { const m = MD[o.kind]; if (!m || !m.smoke) continue;

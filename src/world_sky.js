@@ -21,8 +21,8 @@ CW.WorldSky = (function () {
       col = mix(col, vec3(0.96, 0.84, 0.66), exp(-h * 22.0) * 0.30);                                   // low warm morning band
       float s = max(dot(d, normalize(uSun)), 0.0); col += vec3(1.0, 0.82, 0.55) * (pow(s, 5.0) * 0.20 + pow(s, 60.0) * 0.30);   // glow on the sun's side
       if (uCloud > 0.0 && d.y > 0.0) {                                                                   // phase 3: high fair-weather clouds drifting from the west
-        vec2 q = d.xz / (d.y + 0.12) * 1.6 + (uLive > 0.5 ? vec2(uT * 0.006, uT * 0.0025) : vec2(0.0));
-        float c = smoothstep(0.52, 0.80, skF(q) * 0.75 + skF(q * 3.1 + 7.0) * 0.25) * smoothstep(0.0, 0.25, d.y) * uCloud;
+        vec2 q = d.xz / (d.y + 0.06) * 0.9 + (uLive > 0.5 ? vec2(uT * 0.006, uT * 0.0025) : vec2(0.0));
+        float c = smoothstep(0.50, 0.74, skF(q) * 0.75 + skF(q * 3.1 + 7.0) * 0.25) * smoothstep(0.0, 0.035, d.y) * uCloud;   /* far clouds flatten into bands near the horizon instead of fading out */
         vec3 cc = mix(vec3(0.97, 0.95, 0.90), vec3(1.0, 0.92, 0.80), s) * (0.92 + 0.10 * skN(q * 6.0)); col = mix(col, cc, c * 0.85); }
       if (d.y < 0.0) col = uFog;
       gl_FragColor = vec4(col, 1.0); }`;

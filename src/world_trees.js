@@ -69,6 +69,8 @@ CW.WorldTrees = (function () {
       float g = 0.5 + 0.5 * sin(s * 6.2832); return g * g * (0.75 + 0.25 * sin(t * 0.37 + p.x * 0.002)); }`;
   const HEAD = `attribute vec3 aBase; attribute vec4 aPar; attribute vec2 aSc; uniform sampler2D uOcc; uniform vec2 uOccN; uniform float uT, uLive, uH, uDet, uUnder;
     ${WIND}
+    ${CW.SUN.cloudGLSL}
+    vec3 cwCl() { return uLive > 0.5 ? cwCloudTint(cwCloud(aBase.xz, uT)) : vec3(1.0); }   /* first-look: drifting cloud shadow, one value per tree */
     float occK() { if (uUnder > 0.5 && uDet < 0.5 && fract(aPar.y * 5.3) < 0.5) return 0.0;   // Low detail: half the shrubs and saplings
       float hx = aPar.z; float o = texture2D(uOcc, (vec2(mod(hx, uOccN.x), floor(hx / uOccN.x)) + 0.5) / uOccN).r; return o > 0.5 ? (aPar.y < 0.5 ? 0.0 : 0.62) : 1.0; }
     vec3 rotY(vec3 v) { float c = cos(aPar.x), s = sin(aPar.x); return vec3(v.x * c + v.z * s, v.y, -v.x * s + v.z * c); }
@@ -82,7 +84,7 @@ CW.WorldTrees = (function () {
   const BVS = `${HEAD} attribute vec4 aC; varying vec3 vCol, vN; varying float vDist, vY;
     void main() { float k = occK(); if (k <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
       vec3 l = rotY(vec3(position.x * aSc.x, position.y * aSc.y, position.z * aSc.x)) * k; float H = uH * aSc.y * k;
-      vec3 w = aBase + l + sway(aC.a, H); vN = rotY(normal); vCol = pow(aC.rgb, vec3(2.2)); vY = position.y;
+      vec3 w = aBase + l + sway(aC.a, H); vN = rotY(normal); vCol = pow(aC.rgb, vec3(2.2)) * cwCl(); vY = position.y;
       vec4 mv = viewMatrix * vec4(w, 1.0); vDist = -mv.z; gl_Position = projectionMatrix * mv; }`;
   const BFS = `uniform vec3 uFog; uniform vec2 uFogR; uniform float uCb; varying vec3 vCol, vN; varying float vDist, vY; ${LIGHT}
     void main() { vec3 n = normalize(vN); float ndl = clamp((dot(n, normalize(SUN)) + 0.3) / 1.3, 0.0, 1.0);
@@ -101,7 +103,7 @@ CW.WorldTrees = (function () {
       vec3 w = aBase + l + sway(aL.x, H);
       if (uLive > 0.5) w += n * aSc.x * 0.09 * aL.x * sin(uT * 6.5 + aL.z * 40.0 + position.y) * (0.3 + cwGust(aBase.xz, uT));   // leaf flutter
       float r = fract(aPar.y * 7.13), b = fract(aPar.y * 3.71);   // every tree its own green: a little yellower or bluer, lighter or darker
-      vTint = mix(vec3(1.0, 0.98, 0.80), vec3(0.80, 0.94, 0.92), r) * (0.80 + 0.26 * b) * (1.0 + 0.10 * step(0.94, fract(aPar.y * 13.7)) * vec3(0.5, 0.25, -0.4));
+      vTint = mix(vec3(1.0, 0.98, 0.80), vec3(0.80, 0.94, 0.92), r) * (0.80 + 0.26 * b) * (1.0 + 0.10 * step(0.94, fract(aPar.y * 13.7)) * vec3(0.5, 0.25, -0.4)) * cwCl();
       vUv = uv; vN = n; vAo = aL.y * aL.y; vW = w; vec4 mv = viewMatrix * vec4(w, 1.0); vDist = -mv.z; gl_Position = projectionMatrix * mv; }`;
   const LFS = `uniform sampler2D uAtlas; uniform vec2 uAtlasN; uniform vec3 uFog; uniform vec2 uFogR; varying vec2 vUv; varying vec3 vN, vW, vTint; varying float vAo, vDist; ${LIGHT}
     void main() { vec4 tx = texture2D(uAtlas, vUv);

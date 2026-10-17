@@ -8,7 +8,15 @@ CW.SUN = (function () {
   // ~21 degrees up (morning light), from the west and a little behind the scene: shadows run east and slightly towards the viewer, so you see them
   const d = [-0.88, 0.34, -0.22], L = Math.hypot(...d), v = d.map(x => x / L), f = n => n.toFixed(4);
   return { dir: v, cot: Math.hypot(v[0], v[2]) / v[1], glsl: `vec3(${f(v[0])}, ${f(v[1])}, ${f(v[2])})`,
-    flat0: 0.2809 };   // the old ground sun's height (y); render3d.js scales the sun's strength so flat ground keeps its calibrated brightness
+    flat0: 0.2809,
+    // first-look phase 3: ONE cloud pattern for ground, grass, crops, trees and sky. Fair-weather clouds ~1 km across drift with the
+    // world wind (east-south-east, ~5 m/s). cwCloud = 0 in sun, 1 under a cloud. Only applied while Living landscape is on.
+    cloudGLSL: `float clH(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.743); }
+      float clN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(clH(i), clH(i + vec2(1, 0)), f.x), mix(clH(i + vec2(0, 1)), clH(i + vec2(1, 1)), f.x), f.y); }
+      float cwCloud(vec2 xz, float t) { vec2 p = xz / 1100.0 + vec2(0.866, 0.5) * t * 0.0116; float v = 0.0, a = 0.55;
+        for (int k = 0; k < 3; k++) { v += a * clN(p); p = p * 2.07 + 5.3; a *= 0.5; } return smoothstep(0.50, 0.57, v); }   /* fairly crisp edges: soft ones blurred into the meadow's own patches */
+      vec3 cwCloudTint(float c) { return mix(vec3(1.03, 1.01, 0.97), vec3(0.66, 0.70, 0.81), c); }` };   // the old ground sun's height (y); render3d.js scales the sun's strength so flat ground keeps its calibrated brightness
 })();
 
 // Colour grade, inside three.js's own tone-mapping step, so every material (ground, trees, grass, water, buildings) gets it for a few

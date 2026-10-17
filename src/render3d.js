@@ -42,7 +42,7 @@ CW.R3 = (function () {
       float woods = smoothstep(0.6, 0.9, dd.b), cereal = smoothstep(0.2, 0.32, dd.b) * (1.0 - woods);
       float g = cwGrain(woods > 0.5 ? 4.0 : cereal > 0.5 ? 2.0 : 0.0, p);
       col *= mix(1.0, clamp(g, 0.45, 1.7), woods > 0.5 ? 0.55 : 0.42);
-      if (uLive > 0.5 && cereal > 0.0) { float band = cwN(p / 140.0 + vec2(uT * 0.22, uT * 0.08)) * 0.7 + cwN(p / 47.0 + vec2(uT * 0.4, 0.0)) * 0.3; col *= 1.0 + cereal * 0.16 * (band - 0.5); }
+      if (uLive > 0.5 && cereal > 0.0) { float band = cwGust(p - uMap * 0.5, uT) * 0.75 + cwN(p / 47.0 + vec2(uT * 0.4, 0.0)) * 0.25; col *= 1.0 + cereal * 0.20 * (band - 0.45); }   /* first-look: the SAME gusts that bend the grass roll on across the wheat */
       float cl = dot(col, vec3(0.3, 0.59, 0.11)); col = max(mix(vec3(cl), col, mix(1.12, 1.4, cereal)), 0.0);   /* the bluish sky fill + filmic tone curve wash colours out: put the painting's saturation back */
       return col * vec3(1.74, 1.68, 1.58); }   /* calibrated (17 Oct): under the low sun + fill light a flat lit meadow now shows about the painted colour */
     // terrain pass (17 Oct): the land reads as land. Relief map: r = crest (+) / hollow (-) against the land ~2 hexes around, g = near water.
@@ -99,7 +99,7 @@ CW.R3 = (function () {
     mat.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, U, CW.WAKE ? CW.WAKE.U : {});
       sh.vertexShader = 'varying vec3 vCwW, vCwNw;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vCwW = (modelMatrix * vec4(transformed, 1.0)).xyz; vCwNw = normalize(mat3(modelMatrix) * objectNormal);');
-      sh.fragmentShader = `varying vec3 vCwW, vCwNw; uniform float uT, uLive; uniform sampler2D uWater, uForest, uWake, uWheatM, uWheatA; uniform vec2 uMap, uWTx; uniform vec4 uWBox; uniform vec3 uWheatAvg; uniform float uWheatOn;${GLSL_NOISE}${water ? GLSL_GROUND : ''}\n` + sh.fragmentShader
+      sh.fragmentShader = `varying vec3 vCwW, vCwNw; uniform float uT, uLive; uniform sampler2D uWater, uForest, uWake, uWheatM, uWheatA; uniform vec2 uMap, uWTx; uniform vec4 uWBox; uniform vec3 uWheatAvg; uniform float uWheatOn;${GLSL_NOISE}${CW.SUN.cloudGLSL}${CW.WorldTrees ? CW.WorldTrees.WIND : ''}${water ? GLSL_GROUND : ''}\n` + sh.fragmentShader
         .replace('#include <map_fragment>', (water ? `
   // tree sway: inside the forest mask only, the painted canopies wobble 1-2 px (slow sine + noise); roads, walls and open ground stay put
   vec2 cwOff = vec2(0.0);
@@ -129,10 +129,9 @@ CW.R3 = (function () {
   float cwSheen = 0.0, cwWarm = 0.0;
   if (uLive > 0.5) {
     cwWarm = 0.5 + 0.5 * sin(uT * 0.10472);   // ~60 s sun-warmth cycle, shared with the fog colour (tick)
-    // cloud shadows: soft fbm blobs drifting slowly from the west; at most 18% darker, lit patches a touch warmer
-    vec2 cp = vCwW.xz / 900.0 + vec2(uT * 0.010, uT * 0.004);
-    float sh = smoothstep(0.50, 0.72, cwF(cp)), lit = 1.0 - sh;
-    diffuseColor.rgb *= (1.0 - 0.18 * sh) * mix(vec3(1.0), vec3(1.035, 1.012, 0.975), lit);
+    // cloud shadows (first-look phase 3): the one shared cloud pattern (src/world_sun.js), drifting with the wind; cooler and ~30% darker
+    // underneath, sunlit gaps a touch warmer. Grass, crops and trees use the same pattern, so a shadow darkens everything standing in it.
+    diffuseColor.rgb *= cwCloudTint(cwCloud(vCwW.xz, uT));
 
   }`)
         .replace('#include <opaque_fragment>', 'outgoingLight += cwSheen * vec3(0.80, 0.85, 0.86) * 0.25;\n  outgoingLight *= mix(vec3(1.0), vec3(1.025, 1.005, 0.97), cwWarm);\n#include <opaque_fragment>');
@@ -429,6 +428,7 @@ CW.R3 = (function () {
     if (!ok || !scene) return;
     if (lv === 0 && S.res > 0.8 && S.dpr0 && S.last) { S.res = 0.8; ren.setPixelRatio(S.dpr0 * S.res); ren.setSize(S.last.w, S.last.h, false); }
     if (CW.WORLD && CW.WorldGrass && S.occ && S.wg !== undefined) { try { S.wg = CW.WorldGrass.build({ scene, M, W3, occ: S.occ, U, det: lv }); } catch (e) { console.warn('grass skipped:', e.message); } }
+    U.uCloud.value = lv > 0 ? .55 : 0;
     if (CW.WorldSky) { try { CW.WorldSky.detail(lv); } catch (e) { console.warn('mist skipped:', e.message); } }   // first-look: Low no mist, Medium 1 sheet, High 2
   }   // no render here: the game redraws right after (and the first call comes before the board is sized)
   function setDetail(name) { const auto = !name || name === 'auto', lv = auto ? (S.detAuto ? U.uDet.value : 1) : name === 'low' ? 0 : name === 'high' ? 2 : 1;
@@ -611,7 +611,7 @@ CW.R3 = (function () {
   const tilt = dv => { S.tilt = Math.max(TILT_MIN, Math.min(TILT_MAX, S.tilt + dv)); return S.tilt; };
   function sweep(gc, fitZ, redraw) { if (!ok) return; S.anim = { t0: performance.now(), dur: 3200, tilt: 32, z: Math.min(gc.z, fitZ * .75) };
     const loop = () => { redraw(); if (S.anim) requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
-  U.uLowH = { value: 0 };   // first-look: height of the valley floor (lowest ground + ~1 level), for the morning mist
+  U.uLowH = { value: 0 }; U.uCloud = { value: 0.55 };   // sky clouds (world_sky.js); off on Low   // first-look: height of the valley floor (lowest ground + ~1 level), for the morning mist
   return { uni: n => U[n],   /* first-look: shared uniforms by name (mist strength, clouds), for the opening shot and tests */
     init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, setDetail, get detail() { return (S.detAuto ? 'auto:' : '') + DET[U.uDet.value]; }, bench, snap, onSlow: f => { S.onSlow = f; }, wakeSource: f => { S.src = f; }, wade: (x0, y0, x1, y1, s) => { if (S.live && CW.WAKE && CW.WAKE.ok) CW.WAKE.trail(x0, y0, x1, y1, s * WAKE_S); }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get renderer() { return ren; }, get threads() { return S.threads; }, get ribbon() { return S.ribbon; }, get camera() { return cam; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
 })();

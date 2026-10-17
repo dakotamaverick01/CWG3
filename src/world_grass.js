@@ -35,6 +35,7 @@ CW.WorldGrass = (function () {
   const VS = `attribute vec4 aB, aD; attribute vec2 aOff;
     uniform vec2 uCen, uMap, uOccN, uHgtSz; uniform float uS, uSP, uZoom, uT, uLive, uWrap, uReed, uCrop, uDetG; uniform sampler2D uGD, uHex, uOcc, uRelief, uShade, uPaint, uPData; uniform float uPaintOn; uniform vec2 uPaintSz; varying vec3 vCol; varying float vDist;
     ${CW.WorldTrees.WIND}
+    ${CW.SUN.cloudGLSL}
     const vec3 SUN = ${CW.SUN.glsl};
     float h1(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -81,6 +82,7 @@ CW.WorldGrass = (function () {
       col = col * (0.62 + 0.55 * face) * mix(1.0, 0.5, gd.a) + col * vec3(0.9, 1.0, 0.3) * back * 0.8;
       vec4 shd = texture2D(uShade, (p + uMap * 0.5) / uMap);   /* first-look: baked occlusion (r) and long sun shadows (g), so shadows darken the blades standing in them */
       col *= mix(vec3(0.56, 0.60, 0.74), vec3(1.0), rl.b * shd.r) * mix(vec3(0.42, 0.46, 0.62), vec3(1.0), shd.g);
+      if (uLive > 0.5) { col *= cwCloudTint(cwCloud(wp.xz, uT)) * (1.0 + (uCrop > 0.5 ? 0.16 : 0.10) * cwGust(p, uT) * tt);   /* first-look: drifting cloud shadows + gusts lighten bent blade tips */ }
       vCol = col; vec4 mv = viewMatrix * vec4(wp, 1.0); vDist = -mv.z; gl_Position = projectionMatrix * mv; }`;
   const FS = `uniform vec3 uFog; uniform vec2 uFogR; varying vec3 vCol; varying float vDist;
     void main() { vec3 c = mix(vCol, uFog, smoothstep(uFogR.x, uFogR.y, vDist)); gl_FragColor = vec4(c, 1.0);
