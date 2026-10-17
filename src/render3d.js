@@ -8,7 +8,8 @@
 // Revert = set CW.WORLD = false here (or open play.html?world=0 to compare without editing).
 CW.WORLD = true; try { if (/[?&]world=0\b/.test(location.search)) CW.WORLD = false; } catch (e) {}
 CW.R3 = (function () {
-  const EX = 54, FOV = 30, TILT_MIN = 40, TILT_MAX = 80, TILT_DEF = 40;   // EX = height of one level in map px (hex radius 44); 17 Oct: 30 -> 36 -> 54 (painted-diorama reboot: hills like Ultimate General; visual only)
+  const EX = 54, FOV = 30, TILT_MIN = 10,   /* first-look phase 2: was 40; below 15 degrees the horizon, sky and ridges come into view (general's-eye) */
+    TILT_MAX = 80, TILT_DEF = 40;   // EX = height of one level in map px (hex radius 44); 17 Oct: 30 -> 36 -> 54 (painted-diorama reboot: hills like Ultimate General; visual only)
   let ok = false, failed = false, ren, scene, cam, dcv, dctx, dtex, ttex, terrainSrc = null, M, MW, MH, HW, HH, HF, glc;
   const FULLRES = /[?&]fullres\b/.test(location.search);   // play.html?fullres keeps full board resolution (no automatic step-down)
   const S = { res: 1, dpr0: 0, tilt: TILT_DEF, anim: null, last: null, live: false, raf: 0, prev: 0, acc: 0, n: 0, win0: 0, mats: [], wk: new Map(), src: null, threads: null };
@@ -37,7 +38,7 @@ CW.R3 = (function () {
     // brightness against their own average), chosen by what grows there: meadow grass, crop stalks or leaf litter. Cereal strips shimmer in the wind.
     float cwGrain(float L, vec2 p) { vec3 a = texture(uGA, vec3(p / 190.0, L)).rgb, b = textureLod(uGA, vec3(p / 190.0, L), 9.0).rgb;
       return dot(a, vec3(0.3, 0.59, 0.11)) / max(dot(b, vec3(0.3, 0.59, 0.11)), 0.02); }
-    vec3 cwPaintG(vec2 p) { vec2 uv = p / uPaintSz; vec3 col = texture2D(uPaint, uv).rgb; vec4 dd = texture2D(uPData, uv);
+    vec3 cwPaintG(vec2 p) { vec2 uv = 1.0 - abs(mod(p / uPaintSz, 2.0) - 1.0);   /* first-look: mirrored past the board edge (was clamped: streaks to the horizon) */ vec3 col = texture2D(uPaint, uv).rgb; vec4 dd = texture2D(uPData, uv);
       float woods = smoothstep(0.6, 0.9, dd.b), cereal = smoothstep(0.2, 0.32, dd.b) * (1.0 - woods);
       float g = cwGrain(woods > 0.5 ? 4.0 : cereal > 0.5 ? 2.0 : 0.0, p);
       col *= mix(1.0, clamp(g, 0.45, 1.7), woods > 0.5 ? 0.55 : 0.42);
@@ -410,7 +411,7 @@ CW.R3 = (function () {
       const d = Math.hypot(o.x - p[0], o.y - p[1]); if (d < .3 || d > CW.HW * 4) continue;
       CW.WAKE.trail(p[0], p[1], o.x, o.y, Math.min(1, d / dt / 900) * WAKE_S * (o.cav ? 1.3 : 1)); }
     for (const k of S.wk.keys()) if (!seen.has(k)) S.wk.delete(k); }
-  const FOG0 = window.THREE && new THREE.Color(0xd9c49a), FOG1 = window.THREE && new THREE.Color(0xe2c18e);   // haze: base → a touch warmer, same 60 s cycle as the shader
+  const FOG0 = window.THREE && new THREE.Color(0xcdcfc0), FOG1 = window.THREE && new THREE.Color(0xd9d0b4);   /* first-look: a softer, slightly cooler morning haze (was d9c49a / e2c18e) */   // haze: base → a touch warmer, same 60 s cycle as the shader
   function warmFog() { if (scene && scene.fog) scene.fog.color.lerpColors(FOG0, FOG1, S.live ? .5 + .5 * Math.sin(U.uT.value * .10472) : 0); }
   function setLive(on) { on = !!(on && ok); if (on === S.live) return; S.live = on; U.uLive.value = on ? 1 : 0; if (S.threads) S.threads.visible = on; S.wk.clear(); if (CW.WAKE) CW.WAKE.clear();
     if (on) { S.prev = performance.now(); S.acc = S.n = 0; S.win0 = 0; if (!S.raf) S.raf = requestAnimationFrame(tick); } else { if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; } warmFog(); } }
@@ -428,6 +429,7 @@ CW.R3 = (function () {
     if (!ok || !scene) return;
     if (lv === 0 && S.res > 0.8 && S.dpr0 && S.last) { S.res = 0.8; ren.setPixelRatio(S.dpr0 * S.res); ren.setSize(S.last.w, S.last.h, false); }
     if (CW.WORLD && CW.WorldGrass && S.occ && S.wg !== undefined) { try { S.wg = CW.WorldGrass.build({ scene, M, W3, occ: S.occ, U, det: lv }); } catch (e) { console.warn('grass skipped:', e.message); } }
+    if (CW.WorldSky) { try { CW.WorldSky.detail(lv); } catch (e) { console.warn('mist skipped:', e.message); } }   // first-look: Low no mist, Medium 1 sheet, High 2
   }   // no render here: the game redraws right after (and the first call comes before the board is sized)
   function setDetail(name) { const auto = !name || name === 'auto', lv = auto ? (S.detAuto ? U.uDet.value : 1) : name === 'low' ? 0 : name === 'high' ? 2 : 1;
     if (auto === S.detAuto && lv === U.uDet.value && S.detBuilt) return; S.detAuto = auto; applyDetail(lv); }
@@ -478,7 +480,7 @@ CW.R3 = (function () {
     for (let i = 0; i < HF.length; i++) { rel[i * 4] = Math.max(0, Math.min(255, 128 + (HF[i] - big[i]) / (EX * 1.1) * 127)); rel[i * 4 + 1] = Math.min(255, wet[i] * 330); rel[i * 4 + 2] = Math.round(AO[i] * 255); rel[i * 4 + 3] = 255; hg[i * 4] = half(HF[i]); hg[i * 4 + 3] = half(1); }
     const T = (data, type) => { const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, type); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; return t; };
     if (U.uRelief.value) U.uRelief.value.dispose(); if (U.uHgt.value) U.uHgt.value.dispose();
-    S.hMin = HF.reduce((a, v) => Math.min(a, v), 0); U.uRelief.value = T(rel, THREE.UnsignedByteType); U.uHgtSz.value.set(w * q, h * q); U.uHgt.value = T(hg, THREE.HalfFloatType);
+    S.hMin = HF.reduce((a, v) => Math.min(a, v), 0); U.uLowH.value = S.hMin + EX * .9; U.uRelief.value = T(rel, THREE.UnsignedByteType); U.uHgtSz.value.set(w * q, h * q); U.uHgt.value = T(hg, THREE.HalfFloatType);
   }
   // first-look phase 1: ambient occlusion, baked ONCE per map load (zero cost per frame, so it is on at every Detail level).
   // Soft sky light can't reach creases at the foot of slopes, woods edges, or the ground under trees and buildings, so those read darker
@@ -532,17 +534,23 @@ CW.R3 = (function () {
       // sky: blue overhead fading to a warm haze at the horizon; the haze also swallows distant ground (aerial perspective)
       const sk = document.createElement('canvas'); sk.width = 4; sk.height = 256; const kx = sk.getContext('2d'), g = kx.createLinearGradient(0, 0, 0, 256);
       g.addColorStop(0, '#5f84ad'); g.addColorStop(.45, '#a9b9c4'); g.addColorStop(.62, '#d9c49a'); g.addColorStop(1, '#d9c49a'); kx.fillStyle = g; kx.fillRect(0, 0, 4, 256);
-      const skt = new THREE.CanvasTexture(sk); skt.colorSpace = THREE.SRGBColorSpace; scene.background = skt; scene.fog = new THREE.Fog(0xd9c49a, 1400, 5200);
+      const skt = new THREE.CanvasTexture(sk); skt.colorSpace = THREE.SRGBColorSpace; scene.background = skt; scene.fog = new THREE.Fog(0xcdcfc0, 1400, 5200);
       // ground mesh: ~10 vertices per hex
       const geo = new THREE.PlaneGeometry(MW, MH, M.cols * 10, M.rows * 10); geo.rotateX(-Math.PI / 2);
       const p = geo.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, hAt(p.getX(i) + MW / 2, p.getZ(i) + MH / 2)); geo.computeVertexNormals();
       ttex = new THREE.CanvasTexture(document.createElement('canvas')); ttex.colorSpace = THREE.SRGBColorSpace; ttex.anisotropy = ren.capabilities.getMaxAnisotropy();
       // the ground runs on past the board edge (heights clamp to the edge) and fades into darker countryside in the shader: no cliff, a diorama frame
       // board cells at full detail; m extra rings of cells outside it stretch out (wider and wider) to EB beyond the edge: cheap
-      const EB = Math.round(Math.max(MW, MH) * .6), m = 10, nx = M.cols * 10 + 2 * m, ny = M.rows * 10 + 2 * m, gb = new THREE.PlaneGeometry(1, 1, nx, ny); gb.rotateX(-Math.PI / 2);
+      // first-look phase 2: the countryside now runs ~5 km out to the first ridge ring (was ~1.5 board widths, then a drop to a flat plate),
+      // easing from the board's edge heights to a gently rolling plain, so the low camera sees land all the way to the hills
+      const EB = 5200, m = 16, nx = M.cols * 10 + 2 * m, ny = M.rows * 10 + 2 * m, gb = new THREE.PlaneGeometry(1, 1, nx, ny); gb.rotateX(-Math.PI / 2);
+      let hAvg = 0; for (let i = 0; i < HF.length; i += 7) hAvg += HF[i]; hAvg /= Math.ceil(HF.length / 7);
+      const farH = (X, Z) => { const ox = Math.max(0, Math.abs(X) - MW / 2), oz = Math.max(0, Math.abs(Z) - MH / 2), o = Math.hypot(ox, oz), h0 = hAt(X + MW / 2, Z + MH / 2); if (o <= 0) return h0;
+        const t = Math.min(1, o / 1600), e = t * t * (3 - 2 * t), roll = Math.sin(X / 610 + 1.3) * Math.cos(Z / 540 + .4) + .6 * Math.sin((X + Z) / 1270 + 2.1);
+        return h0 + (hAvg - h0) * e + roll * 55 * Math.min(1, o / 2600); };
       const warp = (k, n, inner) => k < m ? -inner / 2 - EB * ((m - k) / m) ** 1.7 : k > n - m ? inner / 2 + EB * ((k - n + m) / m) ** 1.7 : -inner / 2 + (k - m) / (n - 2 * m) * inner;
       { const P = gb.attributes.position, UV = gb.attributes.uv; for (let i = 0; i < P.count; i++) { const X = warp(i % (nx + 1), nx, MW), Z = warp(Math.floor(i / (nx + 1)), ny, MH);
-          P.setXYZ(i, X, hAt(X + MW / 2, Z + MH / 2), Z); UV.setXY(i, (X + MW / 2) / MW, 1 - (Z + MH / 2) / MH); } gb.computeVertexNormals(); gb.computeBoundingSphere(); }
+          P.setXYZ(i, X, farH(X, Z), Z); UV.setXY(i, (X + MW / 2) / MW, 1 - (Z + MH / 2) / MH); } gb.computeVertexNormals(); gb.computeBoundingSphere(); }
       const ground = new THREE.Mesh(gb, living(new THREE.MeshStandardMaterial({ map: ttex, roughness: 1, metalness: 0 }), true)); ground.receiveShadow = ground.castShadow = true; scene.add(ground);
       // decal: the markings canvas laid over the same hills
       dcv = document.createElement('canvas'); dcv.width = MW; dcv.height = MH; dctx = dcv.getContext('2d');
@@ -556,7 +564,8 @@ CW.R3 = (function () {
       scene.add(new THREE.HemisphereLight(0xcfdcec, 0x6a5a3a, 1.0));
       const SD = CW.SUN.dir, sun = new THREE.DirectionalLight(0xffdcb4, 3.6 * CW.SUN.flat0 / SD[1]); sun.position.set(SD[0] * 1100, SD[1] * 1100, SD[2] * 1100);   /* one sun (src/world_sun.js); strength keeps flat ground as bright as before */ sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
       Object.assign(sun.shadow.camera, { left: -MW * .6, right: MW * .6, top: MH * .75, bottom: -MH * .75, near: 10, far: 4000 }); sun.shadow.bias = -.0006; sun.shadow.normalBias = 1.2; scene.add(sun);
-      cam = new THREE.PerspectiveCamera(FOV, 1, 20, 12000);
+      cam = new THREE.PerspectiveCamera(FOV, 1, 20, 16000);   /* first-look: far enough for the ridge rings */
+      if (CW.WORLD && CW.WorldSky) { try { CW.WorldSky.build({ scene, U, MW, MH, hAt, det: U.uDet.value }); } catch (e) { console.warn('sky and ridges skipped:', e.message); } }
       canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); fail('graphics context lost'); });
       // painted-diorama grade (17 Oct): a gentle colour grade + vignette on the 3D view only (CSS, so it costs nothing in the shaders); units stay crisp on top
       try { canvas.style.filter = 'contrast(1.06)'; const vg = document.createElement('div'); vg.id = 'vign';
@@ -602,5 +611,7 @@ CW.R3 = (function () {
   const tilt = dv => { S.tilt = Math.max(TILT_MIN, Math.min(TILT_MAX, S.tilt + dv)); return S.tilt; };
   function sweep(gc, fitZ, redraw) { if (!ok) return; S.anim = { t0: performance.now(), dur: 3200, tilt: 32, z: Math.min(gc.z, fitZ * .75) };
     const loop = () => { redraw(); if (S.anim) requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
-  return { init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, setDetail, get detail() { return (S.detAuto ? 'auto:' : '') + DET[U.uDet.value]; }, bench, snap, onSlow: f => { S.onSlow = f; }, wakeSource: f => { S.src = f; }, wade: (x0, y0, x1, y1, s) => { if (S.live && CW.WAKE && CW.WAKE.ok) CW.WAKE.trail(x0, y0, x1, y1, s * WAKE_S); }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get renderer() { return ren; }, get threads() { return S.threads; }, get ribbon() { return S.ribbon; }, get camera() { return cam; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
+  U.uLowH = { value: 0 };   // first-look: height of the valley floor (lowest ground + ~1 level), for the morning mist
+  return { uni: n => U[n],   /* first-look: shared uniforms by name (mist strength, clouds), for the opening shot and tests */
+    init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, setDetail, get detail() { return (S.detAuto ? 'auto:' : '') + DET[U.uDet.value]; }, bench, snap, onSlow: f => { S.onSlow = f; }, wakeSource: f => { S.src = f; }, wade: (x0, y0, x1, y1, s) => { if (S.live && CW.WAKE && CW.WAKE.ok) CW.WAKE.trail(x0, y0, x1, y1, s * WAKE_S); }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get renderer() { return ren; }, get threads() { return S.threads; }, get ribbon() { return S.ribbon; }, get camera() { return cam; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
 })();
