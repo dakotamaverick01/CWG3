@@ -377,8 +377,123 @@ def post_rail():
     return m
 
 
+# ---------- first-look phase 5 (17 Oct): hero pieces for the farm nearest the middle of the valley, plus small things worth finding ----------
+def shutters(m, x, y, z, w, h, normal):
+    """a pair of dark green louvred shutters either side of a window (front/back walls only)"""
+    nx, nz = normal
+    for sd in (-1, 1): m.box('shutter', x + sd * (w / 2 + .32) - .26, y - h / 2 - .05, z + (nz * .02 if nz > 0 else -.08), x + sd * (w / 2 + .32) + .26, y + h / 2 + .05, z + (.08 if nz > 0 else -.02), skip=('bottom',))
+
+
+def hero_house():
+    """Pennsylvania fieldstone farmhouse: two-storey stone block, five bays, shutters, full porch with rail, frame kitchen wing, three chimneys"""
+    m = Model('hero_house'); W, D, E, Rg = 11.0, 7.2, 6.3, 9.3
+    foundation(m, W, D, h=.7, mat='stoneDark'); m.house_body(W, D, E, Rg, 'fieldstone'); m.gable_roof(W, D, E, Rg, over=.4, mat='roofShingle')
+    for x in (-4.0, -2.0, 2.0, 4.0): m.window(x, 2.2, D / 2, .85, 1.5, F); shutters(m, x, 2.2, D / 2, .85, 1.5, F)
+    for x in (-4.0, -2.0, 0, 2.0, 4.0): m.window(x, 4.9, D / 2, .85, 1.3, F); shutters(m, x, 4.9, D / 2, .85, 1.3, F)
+    m.door(0, .7, D / 2, 1.1, 2.3, F); m.window(0, 3.2, D / 2 + .01, 1.0, .3, F, panes=False)                              # door + transom light
+    for x in (-3.0, 0, 3.0): m.window(x, 2.2, -D / 2, .85, 1.5, B); m.window(x, 4.9, -D / 2, .85, 1.3, B)
+    m.window(-W / 2, 7.4, 1.2, .55, .7, L)
+    for sx in (-1, 1): chimney(m, sx * (W / 2 - .55), 0, 1.0, 1.5, E, Rg + 1.4, mat='fieldstone')                     # chimneys rise from the gable ends
+    # porch: floor, six posts, rail with balusters, shed roof
+    m.box('wood', -W / 2 + .2, .0, D / 2, W / 2 - .2, .7, D / 2 + 2.6, skip=('bottom',))
+    for x in (-5.2, -3.1, -1.0, 1.0, 3.1, 5.2): m.box('trim', x - .1, .7, D / 2 + 2.3, x + .1, 3.4, D / 2 + 2.5)
+    for a, b in ((-5.2, -1.0), (1.0, 5.2)):
+        m.box('trim', a, 1.55, D / 2 + 2.36, b, 1.65, D / 2 + 2.44)
+        for k in range(int((b - a) / .5)): x = a + .25 + k * .5; m.box('trim', x - .03, .7, D / 2 + 2.37, x + .03, 1.55, D / 2 + 2.43)
+    m.box('wood', -.6, 0, D / 2 + 2.6, .6, .35, D / 2 + 3.2)                                                                     # front step
+    m.slab('roofTin', (-W / 2, 3.75, D / 2 + .05), (W / 2, 3.75, D / 2 + .05), (W / 2, 3.25, D / 2 + 2.85), (-W / 2, 3.25, D / 2 + 2.85), .12)
+    # frame kitchen wing to the right, set back, its own chimney
+    with m.at(x=W / 2 + 2.8, z=-.9):
+        w2, d2, e2, r2 = 5.6, 5.4, 4.4, 6.6
+        foundation(m, w2, d2, h=.5); m.house_body(w2, d2, e2, r2, 'clapboard', along='z'); m.gable_roof(w2, d2, e2, r2, over=.3, mat='roofShingle', along='z')
+        m.window(-.8, 2.0, d2 / 2, .8, 1.3, F); m.door(1.3, .5, d2 / 2, .95, 2.1, F); m.window(w2 / 2, 2.0, 0, .8, 1.3, Rt)
+        chimney(m, 0, -d2 / 2 + .5, .8, .8, 0, r2 + .9)
+    return m
+
+
+def hero_barn():
+    """Pennsylvania bank barn: stone lower storey and gable walls, red frame upper storey overhanging the barnyard (forebay),
+    earthen ramp up to the threshing-floor doors at the back, cross-braced doors, two louvred ventilators on the ridge"""
+    m = Model('hero_barn'); W, D, S, E, Rg, FB = 21.0, 12.0, 3.0, 8.2, 13.2, 2.6
+    m.box('fieldstone', -W / 2 - .15, 0, -D / 2 - .15, W / 2 + .15, S, D / 2 + .15, skip=('bottom',))                # stable level
+    for x in (-7.5, -2.5, 2.5, 7.5): m.door(x, 0, D / 2 + .15, 1.4, 2.2, F, mat='barnDoor')                                     # stable doors under the forebay
+    for x in (-5.0, 0, 5.0): m.window(x, 1.9, D / 2 + .15, .7, .6, F, panes=False)
+    for x in (-9.2, 9.2): m.box('trim', x - .14, 0, D / 2 + FB - .3, x + .14, S, D / 2 + FB - .02)                               # forebay posts
+    with m.at(y=S, z=FB / 2):                                                                                                      # upper storey, pushed forward over the barnyard
+        m.house_body(W, D + FB, E - S, Rg - S, 'barnRed'); m.gable_roof(W, D + FB, E - S, Rg - S, over=.55, mat='roofWood')
+        for sx in (-1, 1):                                                                                                         # stone gable-end walls (typical PA bank barn)
+            m.box('fieldstone', sx * W / 2 - (.22 if sx > 0 else -.0), 0, -(D + FB) / 2, sx * W / 2 + (0 if sx > 0 else -.22), E - S - .4, (D + FB) / 2 - FB, skip=('bottom',))
+            for zz in (-2.0, 2.0): m.door(sx * W / 2 + sx * .24, 2.2, zz - FB / 2, .5, 1.6, (sx, 0), mat='window')                 # ventilation slits
+        for x in (-6.0, 6.0): m.door(x, .8, (D + FB) / 2, 2.6, 2.8, F, mat='barnDoor')                                              # loft doors in the forebay
+        for x in (-6.0, 6.0):
+            for rz in (40, -40):
+                with m.at(x=x, y=2.2, z=(D + FB) / 2 + .1, rz=rz): m.box('trim', -1.7, -.08, 0, 1.7, .08, .06)                        # white cross-bracing
+        m.door(0, E - S + .4, (D + FB) / 2, 1.6, 1.8, F, mat='barnDoor')                                                           # small hay hatch above the loft doors
+        m.door(0, 0, -(D + FB) / 2, 4.6, 4.2, B, mat='barnDoor')                                                                   # threshing-floor doors at the ramp
+        with m.at(z=-(D + FB) / 2 - .1):
+            for rz in (42, -42):
+                with m.at(y=2.1, rz=rz): m.box('trim', -2.6, -.09, -.06, 2.6, .09, 0)
+        for x in (-5.5, 5.5):                                                                                                      # ventilators on the ridge
+            with m.at(x=x, y=Rg - S + .1, z=0):
+                m.box('trim', -.65, 0, -.65, .65, 1.1, .65, skip=('bottom',))
+                for k in range(3): m.box('woodGrey', -.68, .2 + k * .28, -.68, .68, .3 + k * .28, .68)
+                m.cyl('roofTin', 1.05, 0, 1.1, 1.8, seg=4, cap=False, phase=math.pi / 4)
+    # the bank: an earthen ramp from the field up to the threshing doors, with stone wing walls
+    R0, R1 = -D / 2 - .15, -D / 2 - 9.0
+    for sx in (-1, 1): m.slab('fieldstone', (sx * 3.4, 0, R0), (sx * 3.4, 0, R1 + 2.0), (sx * 3.4, .4, R1 + 2.0), (sx * 3.4, S + .3, R0), .5)
+    m.quad('roadDirt', (-3.2, S + .02, R0), (3.2, S + .02, R0), (3.2, .05, R1), (-3.2, .05, R1), centre=(0, -5, (R0 + R1) / 2))
+    for sx in (-1, 1): m.tri('earth', (sx * 3.2, 0, R0), (sx * 3.2, S + .02, R0), (sx * 3.2, .05, R1), centre=(0, 1, (R0 + R1) / 2))
+    return m
+
+
+def outcrop():
+    """limestone outcrop: tilted ledges and a few big blocks breaking through the turf (a knoll-top landmark)"""
+    import random; rnd = random.Random(7); m = Model('outcrop')
+    for i in range(9):
+        a = rnd.uniform(0, 6.283); d = rnd.uniform(0, 3.2) if i else 0; x, z = math.cos(a) * d, math.sin(a) * d * .7
+        h = rnd.uniform(1.0, 2.6) * (1.25 if i == 0 else 1.0); r = rnd.uniform(.9, 1.8) * (1.5 if i == 0 else 1.0)
+        with m.at(x=x, z=z, ry=rnd.uniform(0, 360), rz=rnd.uniform(-14, 14), rx=rnd.uniform(-10, 10)):
+            m.cyl('limestone', r, r * rnd.uniform(.55, .8), -.6, h, seg=rnd.choice((5, 6, 7)), phase=rnd.uniform(0, 3))
+    for i in range(3):                                                                                                            # flat ledges stepping down one side
+        with m.at(x=-2.4 + i * 1.6, z=2.2 - i * .4, ry=rnd.uniform(-20, 20), rz=-8): m.box('limestone', -1.3, -.4, -.9, 1.3, .35 + .15 * (2 - i), .9)
+    return m
+
+
+def farm_dog():
+    """a farm dog lying in the sun by the porch (~1 m long)"""
+    m = Model('farm_dog')
+    m.box('dogTan', -.42, 0, -.17, .38, .30, .17)                                                                                 # body
+    m.box('dogTan', .34, 0, -.15, .58, .14, .15)                                                                                  # front legs stretched forward
+    with m.at(x=.46, y=.3, z=0, ry=12): m.box('dogTan', -.12, -.1, -.13, .14, .14, .13); m.box('dogDark', .14, -.06, -.07, .28, .06, .07)   # head + muzzle
+    for sz in (-1, 1): m.box('dogDark', .40, .36, sz * .1 - .04, .48, .46, sz * .1 + .04)                                       # ears
+    with m.at(x=-.42, y=.12, z=.05, ry=-35): m.box('dogDark', -.42, -.04, -.04, 0, .04, .04)                                        # tail curled on the grass
+    return m
+
+
+def beehives():
+    """three straw bee skeps on a plank bench"""
+    m = Model('beehives'); m.box('wood', -1.3, .45, -.3, 1.3, .55, .3)
+    for x in (-1.5, 1.5): m.box('woodDark', x - .08 if x < 0 else x - .25, 0, -.25, x + .25 if x < 0 else x + .08, .45, .25)
+    for x in (-.85, 0, .85):
+        with m.at(x=x, y=.55):
+            for k in range(4): r0 = .42 - k * .08; m.cyl('hay' if k % 2 == 0 else 'hayDark', r0, r0 - .07, k * .14, k * .14 + .14, seg=8, cap=False)
+            m.cyl('hay', .14, 0, .56, .68, seg=8, cap=False)
+    return m
+
+
+def washline():
+    """washing line between two T-posts with a few sheets and shirts"""
+    m = Model('washline'); L = 7.0
+    for x in (-L / 2, L / 2): m.box('woodGrey', x - .07, 0, -.07, x + .07, 2.1, .07); m.box('woodGrey', x - .07, 1.95, -.45, x + .07, 2.05, .45)
+    m.box('iron', -L / 2, 2.0, -.02, L / 2, 2.03, .02)
+    for x, w, h in ((-2.3, 1.4, 1.3), (-.6, .7, .8), (.6, 1.5, 1.4), (2.3, .7, .7)):
+        with m.at(x=x, ry=8 if x > 0 else -8): m.box('linen', -w / 2, 2.0 - h, -.02, w / 2, 2.0, .02)
+    return m
+
+
 MODELS = {f.__name__: f for f in (house_b, cottage, house_l, brick_b, store_b, barn_b, outhouse, picket, barrels, garden, post_rail, farmhouse, barn, church, store, brick_house, log_cabin, grist_mill, stone_bridge, earthwork, wedge_tent, haystack, well, shed)}
 
+MODELS.update({f.__name__: f for f in (hero_house, hero_barn, outcrop, farm_dog, beehives, washline)})   # first-look phase 5
 MODELS.update({'wagon': lambda: wagon(False), 'wagon_covered': lambda: wagon(True),
                'worm_a': lambda: worm_fence('worm_a', 6, 11, .04), 'worm_b': lambda: worm_fence('worm_b', 5, 23, .08)})
 

@@ -618,6 +618,42 @@
    "norm": "meters",
    "credit": "own",
    "ao": false
+  },
+  "hero_house": {
+   "src": "gen/hero_house.glb",
+   "norm": "meters",
+   "credit": "own",
+   "ao": true
+  },
+  "hero_barn": {
+   "src": "gen/hero_barn.glb",
+   "norm": "meters",
+   "credit": "own",
+   "ao": true
+  },
+  "outcrop": {
+   "src": "gen/outcrop.glb",
+   "norm": "meters",
+   "credit": "own",
+   "ao": true
+  },
+  "farm_dog": {
+   "src": "gen/farm_dog.glb",
+   "norm": "meters",
+   "credit": "own",
+   "ao": false
+  },
+  "beehives": {
+   "src": "gen/beehives.glb",
+   "norm": "meters",
+   "credit": "own",
+   "ao": true
+  },
+  "washline": {
+   "src": "gen/washline.glb",
+   "norm": "meters",
+   "credit": "own",
+   "ao": false
   }
  }
 }

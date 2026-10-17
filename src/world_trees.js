@@ -56,6 +56,7 @@ CW.WorldTrees = (function () {
         for (let t = 0; t < L; t += 30) { if (rand() > .17) continue; const sd = rand() < .5 ? -1 : 1, o = (rd.major ? 15 : 12) + rand() * 7, x = a[0] + dx * t / L - dy / L * o * sd, y = a[1] + dy * t / L + dx / L * o * sd, hx = CW.pixelToHex(M, x, y);
           if (!hx || 'ctwbdfxos'.includes(M.ter(...hx))) continue; add(pick(FIELD, rand(), { dead: .2 }), x, y, PX * (.95 + rand() * .3), rand, hx[1] * M.cols + hx[0], .28); } } }
     if (CW.WorldStructures) for (const o of CW.WorldStructures.place(M)) {   // town and farm yard trees (world_structures.js picks the spots)
+      if (o.kind === 'heroOak') { const hx = CW.pixelToHex(M, o.x, o.y); add('oak', o.x, o.y, PX * 2.1, CW.rng(Math.round(o.x * 13 + o.y * 7)), hx ? hx[1] * M.cols + hx[0] : 0, .42); continue; }   // first-look: the farm's great witness oak
       if (o.kind !== 'broadleaf') continue; const rand = CW.rng(Math.round(o.x * 13 + o.y * 7)), sp = pick(YARD, o.rnd), hx = CW.pixelToHex(M, o.x, o.y);
       add(sp, o.x, o.y, Math.max(PX * .8, Math.min(PX * 1.3, o.sy / T[sp][0].h * (sp === 'apple' ? .5 : 1.1))), rand, hx ? hx[1] * M.cols + hx[0] : 0, .28);
     }

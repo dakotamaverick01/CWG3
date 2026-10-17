@@ -186,7 +186,10 @@
     "roadDirt": 12,
     "rail": 14,
     "railDark": 14,
-    "cropGreen": 15
+    "cropGreen": 15,
+    "fieldstone": 13,
+    "shutter": 7,
+    "limestone": 13
   },
   "rail": [
     132,
@@ -202,5 +205,35 @@
     84,
     116,
     54
+  ],
+  "fieldstone": [
+    146,
+    134,
+    114
+  ],
+  "shutter": [
+    58,
+    78,
+    62
+  ],
+  "dogTan": [
+    156,
+    112,
+    68
+  ],
+  "dogDark": [
+    64,
+    48,
+    36
+  ],
+  "linen": [
+    236,
+    232,
+    218
+  ],
+  "limestone": [
+    138,
+    132,
+    118
   ]
 }

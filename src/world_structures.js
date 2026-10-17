@@ -71,6 +71,9 @@ CW.WorldStructures = (function () {
       if (rand() < .4) { const sd = rand() < .5 ? 1 : -1, px = x + tx * sd * (hw + 3), py = y + ty * sd * (hw + 3); if (free(px, py, 3) && offRoad('outhouse', px, py, 0)) { kit('logsBig', px, py, 4.5 + rand() * 2, rand() * 6.283, rand()); claim(px, py, 3); } }
     }
     const towns = groups(M, 't');
+    // first-look phase 5: the farm nearest the middle of the valley (the star of the opening shot) gets the hero farmhouse and bank barn
+    const [MWp, MHp] = CW.mapSize(M); let hero = null, hd0 = 1e9;
+    for (const [c, r] of M.all) if (M.ter(c, r) === 'h') { const [x, y] = CW.center(c, r), d = Math.hypot(x - MWp * .5, y - MHp * .42); if (d < hd0) { hd0 = d; hero = c + ',' + r; } }
 
     for (const [c, r] of M.all) {
       const t = M.ter(c, r); if (!'thxbdk'.includes(t)) continue;
@@ -103,9 +106,18 @@ CW.WorldStructures = (function () {
           if (free(x, y, 5)) { bld(rand() < .5 ? 'wagon_covered' : 'wagon', x, y, side(ux, uy) + (rand() < .5 ? Math.PI : 0), rand()); claim(x, y, 5); } }
       } else if (t === 'h') {
         const rd = roadDir(M, c, r); let [fx, fy] = rd ? [-rd[1], rd[0]] : towardSet(M, c, r, (a, b) => onRoad(M, a, b)); if (!fx && !fy) [fx, fy] = [0, 1];
-        const hk = ['farmhouse', 'house_b', 'house_l', 'cottage'][Math.floor(rand() * 4)], bk = rand() < .5 ? 'barn' : 'barn_b';
-        const hx = cx + fx * R * .18, hy = cy + fy * R * .18; bld(hk, hx, hy, front(fx, fy), rand()); claim(hx, hy, foot(hk)); yard(hk, hx, hy, fx, fy, rand);
-        const bx = cx - fx * R * .42 + fy * R * .2, by = cy - fy * R * .42 - fx * R * .2; bld(bk, bx, by, front(fx, fy) + (rand() < .5 ? 1.5708 : 0), rand()); claim(bx, by, foot(bk));
+        const isHero = hero === c + ',' + r && MD.hero_house && MD.hero_barn;
+        const hk0 = ['farmhouse', 'house_b', 'house_l', 'cottage'][Math.floor(rand() * 4)], bk0 = rand() < .5 ? 'barn' : 'barn_b', hk = isHero ? 'hero_house' : hk0, bk = isHero ? 'hero_barn' : bk0;
+        const hx = cx + fx * R * (isHero ? .26 : .18), hy = cy + fy * R * (isHero ? .26 : .18); bld(hk, hx, hy, front(fx, fy), rand(), 0, K, isHero ? 0 : 1); claim(hx, hy, foot(hk)); yard(hk, hx, hy, fx, fy, rand);
+        const bx = cx - fx * R * (isHero ? .36 : .42) + fy * R * .2, by = cy - fy * R * (isHero ? .36 : .42) - fx * R * .2, byaw = rand() < .5 ? 1.5708 : 0;
+        bld(bk, bx, by, front(fx, fy) + (isHero ? 0 : byaw), rand(), 0, K, isHero ? 0 : 1); claim(bx, by, foot(bk));   /* hero barn: forebay toward the farmyard, ramp out the back */
+        if (isHero) {   // small things worth finding: the dog on the porch step, a witness oak, beehives and a washing line in the side yard
+          const sx = -fy, sy = fx, hw = (MD.hero_house.x || MD.hero_house.w) * K * .5;
+          bld('farm_dog', hx + fx * 7.4 * K + sx * 1.4 * K, hy + fy * 7.4 * K + sy * 1.4 * K, front(fx, fy) + 1.9, rand(), 0, K, 0);
+          out.push({ kind: 'heroOak', x: hx + sx * (hw + 14) + fx * 14, y: hy + sy * (hw + 14) + fy * 14, lift: 0, yaw: 0, pitch: 0, rnd: rand(), sx: 1, sy: 1, sz: 1 }); claim(hx + sx * (hw + 14) + fx * 14, hy + sy * (hw + 14) + fy * 14, 9);
+          { const x = hx + sx * (hw + 8) - fx * 9, y = hy + sy * (hw + 8) - fy * 9; if (free(x, y, 8)) { bld('washline', x, y, front(sy, -sx), rand(), 0, K, 0); claim(x, y, 8); } }
+          { const x = hx + sx * (hw + 3) - fx * 20, y = hy + sy * (hw + 3) - fy * 20; if (free(x, y, 4)) { bld('beehives', x, y, front(fx, fy), rand(), 0, K, 0); claim(x, y, 4); } }
+        }
         { const x = bx + fy * R * .3, y = by - fx * R * .3; if (free(x, y, 5) && rand() < .6) { bld('wagon', x, y, rand() * 6.283, rand()); claim(x, y, 5); } }
         for (const s of [1, -1]) { const x = cx + fy * s * R * .55 - fx * R * .1, y = cy - fx * s * R * .55 - fy * R * .1; if (free(x, y, 5)) { bld('haystack', x, y, rand() * 6.283, rand()); claim(x, y, 5); } }
         { const x = cx + fy * R * .32 + fx * R * .45, y = cy - fx * R * .32 + fy * R * .45; if (free(x, y, 3)) bld('well', x, y, rand() * 6.283, rand()); }
@@ -116,7 +128,8 @@ CW.WorldStructures = (function () {
           out.push({ kind: 'earthwork', x: cx + fx * rad, y: cy + fy * rad * .95, lift: -.3, yaw: front(fx, fy), pitch: 0, rnd: rand(), sx: K * sl, sy: K, sz: K }); }
         for (const [dx, dy] of [[-.16, -.1], [.12, -.16], [.02, .16]]) bld('wedge_tent', cx + dx * R, cy + dy * R, a0 + rand() * .4, rand());
       } else if (t === 'k') {
-        for (let k = 0; k < 3; k++) kit(k === 1 ? 'rockC' : 'rockA', cx + (rand() - .5) * R * 1.1, cy + (rand() - .5) * R * .9, 8 + rand() * 6, rand() * 6.283, rand(), -1);
+        if (MD.outcrop) bld('outcrop', cx + (rand() - .5) * R * .2, cy + (rand() - .5) * R * .2, rand() * 6.283, rand(), -2.6, K * 2.1);   /* first-look: limestone outcrop crowning the knoll; replaces the old floating kit boulders */
+        else for (let k = 0; k < 3; k++) kit(k === 1 ? 'rockC' : 'rockA', cx + (rand() - .5) * R * 1.1, cy + (rand() - .5) * R * .9, 8 + rand() * 6, rand() * 6.283, rand(), -1);
       } else if (t === 'b') {
         const [dx, dy] = crossDir(M, c, r); out.push({ kind: 'stone_bridge', x: cx, y: cy, lift: 0, yaw: side(dx, dy), pitch: 0, rnd: rand(), sx: K, sy: K, sz: K });
       } else if (t === 'd') {
@@ -187,7 +200,7 @@ CW.WorldStructures = (function () {
   // env: { scene, M, W3, U (shared Living uniforms) }
   function build(env) {
     const SM = CW.MODELS; if (!SM) throw new Error('models.js missing');
-    dispose(); scene = env.scene; const list = place(env.M).filter(o => !(CW.TREES && o.kind === 'broadleaf')); list.W3 = env.W3;   // yard trees: drawn by world_trees.js
+    dispose(); scene = env.scene; const list = place(env.M).filter(o => !(CW.TREES && o.kind === 'broadleaf') && o.kind !== 'heroOak'); list.W3 = env.W3;   // yard trees: drawn by world_trees.js
     const fog = { uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
     parts = CW.WorldEdges.instanced(scene, list, SM, [...new Set(list.map(o => o.kind))], fog);
     const sh = shadows(list); if (sh) { scene.add(sh); parts.push(sh); }
