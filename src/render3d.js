@@ -585,7 +585,9 @@ CW.R3 = (function () {
     let tilt = S.tilt, z = gc.z; const a = S.anim;
     if (a) { const t = Math.min(1, (performance.now() - a.t0) / a.dur), e = t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
       tilt = a.tilt + (tilt - a.tilt) * e; z = a.z * Math.pow(gc.z / a.z, e); if (t >= 1) S.anim = null; }
-    const tx = (w / 2 - gc.x) / gc.z, ty = (h / 2 - gc.y) / gc.z, T = W3(tx, ty), D = h / (2 * z * Math.tan(FOV * Math.PI / 360)), el = tilt * Math.PI / 180;
+    let tx = (w / 2 - gc.x) / gc.z, ty = (h / 2 - gc.y) / gc.z;
+    if (a && a.cx != null) { const e2 = S.anim ? (t => t * t * (3 - 2 * t))(Math.min(1, (performance.now() - a.t0) / a.dur)) : 1; tx = a.cx + (tx - a.cx) * e2; ty = a.cy + (ty - a.cy) * e2; }   /* opening shot: glide from the valley centre to the army */
+    const T = W3(tx, ty), D = h / (2 * z * Math.tan(FOV * Math.PI / 360)), el = tilt * Math.PI / 180;
     cam.aspect = w / h; cam.position.set(T.x, T.y + D * Math.sin(el), T.z + D * Math.cos(el)); cam.up.set(0, 1, 0); cam.lookAt(T); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
     S.last = { w, h }; }
   function render(gc, w, h, dpr, terrainImg) {
@@ -609,9 +611,27 @@ CW.R3 = (function () {
     const q = o.clone().addScaledVector(d, t); return [q.x + MW / 2, q.z + MH / 2]; }
   // tilt: [ ] keys; the opening sweep starts high and wide, then settles on the army
   const tilt = dv => { S.tilt = Math.max(TILT_MIN, Math.min(TILT_MAX, S.tilt + dv)); return S.tilt; };
+  // first-look phase 4: the OPENING SHOT for a new battle (~8 s). Starts low across the valley at morning (sky, ridges, mist thick in the creek
+  // bottoms), then cranes up and over to the army at the normal view while the mist lifts. Any key, click or wheel skips straight to the end
+  // (and that click is swallowed, so it can't select a unit by accident). The interface fades out for the shot and back in after.
+  function opening(gc, fitZ, redraw) { if (!ok) return sweep(gc, fitZ, redraw);
+    const h = (glc && glc.clientHeight) || 600, D0 = MH * .95, z0 = h / (2 * D0 * Math.tan(FOV * Math.PI / 360));
+    S.anim = { t0: performance.now(), dur: 8000, tilt: 11, z: Math.min(z0, gc.z), cx: MW * .5, cy: MH * .42, open: true };
+    const mist = U.uMist, rest = mist ? mist.value : .3, sm = (a, b, t) => { t = Math.max(0, Math.min(1, (t - a) / (b - a))); return t * t * (3 - 2 * t); };
+    if (mist) mist.value = 1;
+    const skip = e => { if (!S.anim || !S.anim.open) return; e.preventDefault(); e.stopPropagation(); S.anim.t0 = -1e9; };
+    const evs = ['keydown', 'pointerdown', 'wheel']; evs.forEach(t => window.addEventListener(t, skip, { capture: true, passive: false }));
+    const frame = on => { const h1 = glc ? glc.clientHeight : 0; document.body.classList.toggle('cw-cine', on); window.dispatchEvent(new Event('resize'));   /* the battlefield fills the window for the shot */
+      const h2 = glc ? glc.clientHeight : 0; if (CW.G && CW.G.cam) CW.G.cam.y -= (h1 - h2) / 2; };   /* keep the same map point in the middle of the screen */
+    frame(true);
+    const loop = () => { const a = S.anim, t = a ? Math.min(1, (performance.now() - a.t0) / a.dur) : 1;
+      if (mist) mist.value = 1 - (1 - rest) * sm(.3, 1, t);   /* the mist lifts during the second half of the shot */
+      redraw(); if (S.anim) requestAnimationFrame(loop);
+      else { if (mist) mist.value = rest; evs.forEach(t2 => window.removeEventListener(t2, skip, { capture: true })); frame(false); redraw(); } };
+    requestAnimationFrame(loop); }
   function sweep(gc, fitZ, redraw) { if (!ok) return; S.anim = { t0: performance.now(), dur: 3200, tilt: 32, z: Math.min(gc.z, fitZ * .75) };
     const loop = () => { redraw(); if (S.anim) requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
   U.uLowH = { value: 0 }; U.uCloud = { value: 0.55 };   // sky clouds (world_sky.js); off on Low   // first-look: height of the valley floor (lowest ground + ~1 level), for the morning mist
   return { uni: n => U[n],   /* first-look: shared uniforms by name (mist strength, clouds), for the opening shot and tests */
-    init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, setDetail, get detail() { return (S.detAuto ? 'auto:' : '') + DET[U.uDet.value]; }, bench, snap, onSlow: f => { S.onSlow = f; }, wakeSource: f => { S.src = f; }, wade: (x0, y0, x1, y1, s) => { if (S.live && CW.WAKE && CW.WAKE.ok) CW.WAKE.trail(x0, y0, x1, y1, s * WAKE_S); }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get renderer() { return ren; }, get threads() { return S.threads; }, get ribbon() { return S.ribbon; }, get camera() { return cam; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
+    opening, init, on: opts => ok && !(opts && opts.flat), decal: () => dctx, render, project, local, pick, tilt, sweep, hAt, get tiltDeg() { return S.tilt; }, animating: () => !!S.anim, setLive, setDetail, get detail() { return (S.detAuto ? 'auto:' : '') + DET[U.uDet.value]; }, bench, snap, onSlow: f => { S.onSlow = f; }, wakeSource: f => { S.src = f; }, wade: (x0, y0, x1, y1, s) => { if (S.live && CW.WAKE && CW.WAKE.ok) CW.WAKE.trail(x0, y0, x1, y1, s * WAKE_S); }, get live() { return S.live; }, get avgMs() { return S.avg || 0; }, get waterTex() { return U.uWater.value; }, get renderer() { return ren; }, get threads() { return S.threads; }, get ribbon() { return S.ribbon; }, get camera() { return cam; }, get forestTex() { return U.uForest.value; }, get failed() { return failed; } };
 })();

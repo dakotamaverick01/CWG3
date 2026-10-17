@@ -480,23 +480,33 @@ const ACT = { C: () => { G.tool.cmd = !G.tool.cmd; draw(); toast(G.tool.cmd ? 'C
   '[': () => tiltBy(-6), ']': () => tiltBy(6),
   '3': () => { G.opts.flat = !G.opts.flat; CW.saveOpts(G.opts); draw(); toast(G.opts.flat ? 'Flat map (classic top-down). Press 3 for the 3D battlefield' : CW.R3 && CW.R3.failed ? '3D battlefield is unavailable on this computer' : '3D battlefield. [ and ] tilt the view'); },
   L: () => { G.tool.los = !G.tool.los; draw(); toast(G.tool.los ? 'Line-of-sight tool: hover any hex to see what can be seen from it' : 'LOS tool off'); } };
-CW.act = k => { if (G.started && ACT[k] && (!G.aiBusy || 'Z+-=[]3'.includes(k))) ACT[k](); };
+// photo mode (first-look phase 4): P hides the whole interface and lets the battlefield fill the window; P or Esc brings it back
+ACT.P = () => { const on = document.body.classList.toggle('cw-photo'); if (on) select(null); fit(); toast(on ? 'Photo mode: drag to pan, wheel to zoom, [ ] to tilt. P or Esc to return' : 'Interface back'); };
+CW.act = k => { if (G.started && ACT[k] && (!G.aiBusy || 'Z+-=[]3P'.includes(k))) ACT[k](); };
 
 // ---------- input ----------
 const toWorld = e => { const r = cv.getBoundingClientRect(); if (is3D()) return CW.R3.pick(e.clientX - r.left, e.clientY - r.top) || [-1e5, -1e5];   // 3D: follow the mouse ray down onto the hills
   return [(e.clientX - r.left - G.cam.x) / G.cam.z, (e.clientY - r.top - G.cam.y) / G.cam.z]; };
 let drag = null, orderDrag = null;
 const commanding = () => G.started && G.group && G.sel && G.sel.side === G.side && G.sel.level === 'div';
-cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, cx: G.cam.x, cy: G.cam.y, moved: false, btn: e.button };
+cv.addEventListener('pointerdown', e => { if (G.glide) { cancelAnimationFrame(G.glide); G.glide = 0; } drag = { x: e.clientX, y: e.clientY, cx: G.cam.x, cy: G.cam.y, moved: false, btn: e.button };
   if (e.button === 0 && commanding() && !G.aiBusy) { const h = CW.pixelToHex(M, ...toWorld(e)), here = h ? CW.unitsAt(G.units, ...h).filter(shown) : [];
     if (h && !here.some(o => o.side !== G.side)) orderDrag = { a: toWorld(e), cache: {} }; } });
 window.addEventListener('pointerup', e => { const od = orderDrag; orderDrag = null;
   if (od && od.dragging) { drag = null; const L = G.sel; CW.ORD.issue(L, od.a, toWorld(e)); afterBrigade(L); return; }
-  if (drag && !drag.moved && e.target === cv) { if (G.anim) { G.anim = null; } click(e, drag.btn); } drag = null; draw(); });
+  if (drag && !drag.moved && e.target === cv) { if (G.anim) { G.anim = null; } click(e, drag.btn); }
+  if (drag && drag.moved && drag.vt && performance.now() - drag.vt < 70 && Math.hypot(drag.vx, drag.vy) > .15) glide(drag.vx, drag.vy);   /* first-look: the map glides to a stop */
+  drag = null; draw(); });
+// camera inertia (first-look phase 4): after a quick drag the view coasts on and slows down smoothly, instead of stopping dead
+function glide(vx, vy) { let last = performance.now();
+  const step = now => { const dt = Math.min(50, now - last); last = now; G.cam.x += vx * dt; G.cam.y += vy * dt; const k = Math.exp(-dt / 230); vx *= k; vy *= k; clampCam(); draw();
+    G.glide = Math.hypot(vx, vy) > .02 ? requestAnimationFrame(step) : 0; };
+  G.glide = requestAnimationFrame(step); }
 cv.addEventListener('pointermove', e => {
   if (orderDrag && drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.hypot(dx, dy) > 8) { orderDrag.dragging = drag.moved = true; }
     if (orderDrag.dragging) { orderDrag.pv = CW.ORD.preview(G.sel, orderDrag.a, toWorld(e), false, orderDrag.cache); draw(); return; } }
-  if (drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.hypot(dx, dy) > 5) drag.moved = true; if (drag.moved) { G.cam.x = drag.cx + dx; G.cam.y = drag.cy + dy / (is3D() ? Math.sin(CW.R3.tiltDeg * Math.PI / 180) : 1); clampCam(); draw(); return; } }
+  if (drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.hypot(dx, dy) > 5) drag.moved = true; if (drag.moved) { const ox = G.cam.x, oy = G.cam.y, now = performance.now(); G.cam.x = drag.cx + dx; G.cam.y = drag.cy + dy / (is3D() ? Math.sin(CW.R3.tiltDeg * Math.PI / 180) : 1); clampCam();
+      if (drag.vt) { const dt = Math.max(1, now - drag.vt), f = Math.min(1, dt / 40); drag.vx = (drag.vx || 0) * (1 - f) + (G.cam.x - ox) / dt * f; drag.vy = (drag.vy || 0) * (1 - f) + (G.cam.y - oy) / dt * f; } drag.vt = now; draw(); return; } }
   const h = CW.pixelToHex(M, ...toWorld(e)); if (String(h) !== String(G.hover)) { G.hover = h; draw(); CW.panelTerrain(G, M); } });
 window.addEventListener('keydown', e => { if (e.key === 'Escape' && orderDrag) { orderDrag = null; drag = null; draw(); } });
 cv.addEventListener('pointerleave', () => { G.hover = null; draw(); });
@@ -518,7 +528,7 @@ function click(e, btn) {
     select(u); if (u.side !== G.side) toast('Enemy unit'); } else select(null);
 }
 window.addEventListener('keydown', e => { if (G.anim) { G.anim = null; draw(); return; } if (e.metaKey || e.ctrlKey || e.altKey) return; if (CW.isModal()) { if (e.key === 'Escape' && G.started) CW.closeModal(); return; }
-  if (e.key === 'Escape') return select(null); if (e.key === 'Tab') { e.preventDefault(); if (G.started && !G.aiBusy) nextActor(e.shiftKey ? -1 : 1); return; } const k = e.key === ' ' ? ' ' : e.key.toUpperCase(); if (k.length === 1) { if (k === ' ') e.preventDefault(); CW.act(k); } });
+  if (e.key === 'Escape') return document.body.classList.contains('cw-photo') ? CW.act('P') : select(null); if (e.key === 'Tab') { e.preventDefault(); if (G.started && !G.aiBusy) nextActor(e.shiftKey ? -1 : 1); return; } const k = e.key === ' ' ? ' ' : e.key.toUpperCase(); if (k.length === 1) { if (k === ' ') e.preventDefault(); CW.act(k); } });
 function fit() { const w = cv.clientWidth, h = cv.clientHeight, dpr = window.devicePixelRatio || 1; cv.width = w * dpr; cv.height = h * dpr; cx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (!G.cam.init && w) { const L = G.opts.roster ? 246 : 0; G.cam.z = Math.min((w - L) / MW, h / MH); G.cam.x = L + (w - L - MW * G.cam.z) / 2; G.cam.y = (h - MH * G.cam.z) / 2; G.cam.init = 1; } draw(); }
 window.addEventListener('resize', fit);
@@ -537,7 +547,7 @@ function toggleOverview() { const fz = fitZoom(); if (G.cam.z > fz * 1.15) { G.c
   else if (G.cam.prev) { Object.assign(G.cam, G.cam.prev); delete G.cam.prev; draw(); } else if (G.sel) { G.cam.z = CW.CAM_Z; CW.centerOn(G.sel.c, G.sel.r); } else armyView(); }
 function newGame(side, difficulty, opp = 'ai') {
   Object.assign(G, { opp, over: 0, aiBusy: 0, aiMem: null, units: CW.buildArmy(M, window.OOB_DEMO), reinf: structuredClone(window.REINF_DEMO), obj: structuredClone(M.objectives || []), cas: { CS: 0, US: 0 }, side: 'CS', player: side, turn: 1, minutes: 480, weather: 'clear', supply: { CS: 400, US: 600 }, morale: { CS: 50, US: 50 }, endAt: 2160 });
-  G.opts.difficulty = difficulty; CW.saveOpts(G.opts); G.started = true; armyView(); if (is3D()) CW.R3.sweep(G.cam, fitZoom(), draw); startSideTurn();
+  G.opts.difficulty = difficulty; CW.saveOpts(G.opts); G.started = true; armyView(); if (is3D()) (CW.R3.opening || CW.R3.sweep)(G.cam, fitZoom(), draw); startSideTurn();   /* first-look: 8 s opening shot (any key skips) */
 }
 function loadState(s) { Object.assign(G, { opp: s.opp || 'hotseat', over: 0, aiBusy: 0, aiMem: s.aiMem || null, obj: s.obj || structuredClone(M.objectives || []), cas: s.cas || { CS: 0, US: 0 }, units: s.units, reinf: s.reinf || [], side: s.side, player: s.player || s.side, turn: s.turn, minutes: s.minutes, weather: s.weather, supply: s.supply, morale: s.morale, endAt: s.endAt || 2160, anim: null });
   G.started = true; G.undo = []; refreshVis(); select(null); armyView(); if (is3D()) CW.R3.sweep(G.cam, fitZoom(), draw); toast(`Loaded · ${CW.fmtTime(G.minutes)}`); if (isAI(G.side)) { setTimeout(runAI, 900); return; } if (G.opts.autoNext) setTimeout(() => { if (!G.sel && !CW.isModal()) nextBrigade(null); }, 900); }
