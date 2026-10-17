@@ -76,7 +76,7 @@ CW.WorldTrees = (function () {
     vec3 sway(float wt, float H) { if (uLive < 0.5) return vec3(0.0); float g = cwGust(aBase.xz, uT), ph = aPar.y * 6.283;
       vec2 d = WDIR * (0.25 + 0.75 * g) * 0.022 + vec2(-WDIR.y, WDIR.x) * 0.006 * sin(uT * 1.1 + ph);
       return vec3(d.x, 0.0, d.y) * H * wt * wt; }`;
-  const LIGHT = `const vec3 SUN = vec3(-0.5, 0.75, 0.25);
+  const LIGHT = `const vec3 SUN = ${CW.SUN.glsl};   /* one sun (src/world_sun.js) */
     vec3 finish(vec3 c, float dist) { float fd = smoothstep(uFogR.x * 0.4, uFogR.y, dist); c = mix(c, vec3(dot(c, vec3(0.3, 0.59, 0.11))), fd * 0.35);
       return mix(c, uFog, smoothstep(uFogR.x, uFogR.y, dist)); }`;
   const BVS = `${HEAD} attribute vec4 aC; varying vec3 vCol, vN; varying float vDist, vY;
@@ -116,14 +116,22 @@ CW.WorldTrees = (function () {
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`;
-  const SVS = `attribute vec3 aBase, aShd; attribute vec4 aPar; uniform sampler2D uOcc, uHgt; uniform vec2 uOccN, uHgtSz, uMapW; varying vec2 vQ; varying float vA;
+  // first-look phase 1: long sun shadows from the one sun (src/world_sun.js). A trunk line from the foot, then the crown's ellipse
+  // (a ball's shadow stretches to radius / sin(sun height) along the sun's direction). Low detail keeps them shorter (less overdraw).
+  const SVS = `attribute vec3 aBase, aShd; attribute vec4 aPar; uniform sampler2D uOcc, uHgt; uniform vec2 uOccN, uHgtSz, uMapW; uniform float uDet; varying vec2 vP; varying vec3 vS; varying float vA;
     void main() { float hx = aPar.z; float o = texture2D(uOcc, (vec2(mod(hx, uOccN.x), floor(hx / uOccN.x)) + 0.5) / uOccN).r; float k = o > 0.5 ? (aPar.y < 0.5 ? 0.0 : 0.62) : 1.0;
       if (k <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
-      vec2 c = position.xy, dir = normalize(vec2(1.0, -0.45)), side = vec2(-dir.y, dir.x); float R = aShd.x * k, Hc = aShd.y * k, Lh = R * 1.05 + Hc * 0.45;
-      vec2 p = dir * (Hc * 0.62 + c.x * 2.0 * Lh) + side * c.y * 2.0 * R * 1.05;   // from under the trunk to well east of it (low western sun)
-      vQ = c * 2.0; vA = aShd.z; vec2 wp = aBase.xz + p; float gy = texture2D(uHgt, (wp + uHgtSz * 0.5 - (uHgtSz - uMapW) * 0.5) / uHgtSz).r;
+      vec3 S = normalize(${CW.SUN.glsl}); vec2 dir = -normalize(S.xz), side = vec2(-dir.y, dir.x);
+      float cot = min(length(S.xz) / S.y, uDet < 0.5 ? 1.2 : 4.0), R = aShd.x * k, C = aShd.y * k * cot, Ra = R * min(1.0 / S.y, uDet < 0.5 ? 1.4 : 2.6);
+      vec2 c = position.xy + 0.5; float al = mix(-R * 0.7, C + Ra * 1.15, c.x), ac = (c.y - 0.5) * 2.0 * R * 1.2;
+      vP = vec2(al, ac); vS = vec3(C, Ra, R); vA = aShd.z;
+      vec2 wp = aBase.xz + dir * al + side * ac; float gy = texture2D(uHgt, (wp + uHgtSz * 0.5 - (uHgtSz - uMapW) * 0.5) / uHgtSz).r;
       gl_Position = projectionMatrix * viewMatrix * vec4(wp.x, gy + 0.9, wp.y, 1.0); }`;
-  const SFS = `varying vec2 vQ; varying float vA; void main() { float d = length(vQ); gl_FragColor = vec4(0.08, 0.07, 0.12, (1.0 - smoothstep(0.25, 1.0, d)) * vA); }`;
+  const SFS = `varying vec2 vP; varying vec3 vS; varying float vA;
+    void main() { float e = length(vec2((vP.x - vS.x) / vS.y, vP.y / vS.z)), crown = 1.0 - smoothstep(0.35, 1.0, e);
+      float trunk = (1.0 - smoothstep(vS.z * 0.05, vS.z * 0.16, abs(vP.y))) * smoothstep(-1.0, 0.5, vP.x) * (1.0 - smoothstep(vS.x * 0.55, vS.x * 0.95, vP.x)) * 0.75;
+      float foot = 1.0 - smoothstep(0.0, vS.z * 0.75, length(vP));   /* contact shade right at the foot */
+      gl_FragColor = vec4(0.07, 0.07, 0.13, max(max(crown, trunk), foot * 0.8) * vA * 1.45); }`;
 
   const dec = (s, T) => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new T(u.buffer); };
   let atlasTex = null;
@@ -160,7 +168,7 @@ CW.WorldTrees = (function () {
       shd.set([Math.max(1.2, m.r) * t.s, m.hc * t.sy, t.sh], i * 3); });
     const sg = new THREE.InstancedBufferGeometry(), q = new THREE.PlaneGeometry(1, 1); sg.index = q.index; sg.setAttribute('position', q.attributes.position);
     sg.setAttribute('aBase', new THREE.InstancedBufferAttribute(base, 3)); sg.setAttribute('aPar', new THREE.InstancedBufferAttribute(par, 4)); sg.setAttribute('aShd', new THREE.InstancedBufferAttribute(shd, 3)); sg.instanceCount = n;
-    const sh = new THREE.Mesh(sg, new THREE.ShaderMaterial({ vertexShader: SVS, fragmentShader: SFS, uniforms: { uOcc: shared.uOcc, uOccN: shared.uOccN, uHgt: shared.uHgt || { value: null }, uHgtSz: shared.uHgtSz || { value: new THREE.Vector2(1, 1) }, uMapW: shared.uMapW || { value: new THREE.Vector2(1, 1) } },
+    const sh = new THREE.Mesh(sg, new THREE.ShaderMaterial({ vertexShader: SVS, fragmentShader: SFS, uniforms: { uOcc: shared.uOcc, uOccN: shared.uOccN, uDet: shared.uDet || { value: 1 }, uHgt: shared.uHgt || { value: null }, uHgtSz: shared.uHgtSz || { value: new THREE.Vector2(1, 1) }, uMapW: shared.uMapW || { value: new THREE.Vector2(1, 1) } },
       transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide }));
     sh.frustumCulled = false; sh.renderOrder = 1; scene.add(sh); parts.push(sh);
     return parts;

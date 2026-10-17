@@ -138,7 +138,7 @@ CW.WorldStructures = (function () {
   // soft sun shadows: each building's footprint swept away from the low western sun (the same sun as every other light in the game)
   const SVS = `attribute vec3 aBase; attribute vec4 aBox; varying vec2 vQ; varying vec4 vB; varying vec2 vS;
     void main() {
-      float cy = cos(aBox.x), sy = sin(aBox.x); vec2 sw = vec2(0.5, -0.25) / 0.75 * aBox.w * 1.35;            // ground shadow vector (world x, z) for sun (-0.5, 0.75, 0.25), stretched a little: late-afternoon light
+      float cy = cos(aBox.x), sy = sin(aBox.x); vec3 S = normalize(${CW.SUN.glsl}); vec2 sw = -S.xz / S.y * aBox.w;   /* first-look: the one sun (src/world_sun.js), true shadow length */            // ground shadow vector (world x, z) for sun (-0.5, 0.75, 0.25), stretched a little: late-afternoon light
       vec2 sl = vec2(sw.x * cy - sw.y * sy, sw.x * sy + sw.y * cy);                                       // same vector in the building's own axes
       vec2 e = aBox.yz + 3.0, lo = min(-e, -e + sl), hi = max(e, e + sl), q = mix(lo, hi, position.xy + 0.5);
       vQ = q; vB = vec4(aBox.yz, 0.0, 0.0); vS = sl;
@@ -146,8 +146,8 @@ CW.WorldStructures = (function () {
       gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0); }`;
   const SFS = `varying vec2 vQ; varying vec4 vB; varying vec2 vS;
     float box(vec2 p) { vec2 d = abs(p) - vB.xy; return 1.0 - smoothstep(-2.5, 2.5, max(d.x, d.y)); }
-    void main() { float a = 0.0; for (int k = 0; k <= 6; k++) { float t = float(k) / 6.0; a = max(a, box(vQ - vS * t) * (1.0 - 0.3 * t)); }
-      gl_FragColor = vec4(0.08, 0.07, 0.12, a * 0.55); }`;
+    void main() { float a = 0.0; for (int k = 0; k <= 12; k++) { float t = float(k) / 12.0; a = max(a, box(vQ - vS * t) * (1.0 - 0.3 * t)); }
+      gl_FragColor = vec4(0.07, 0.07, 0.13, a * 0.6); }`;
   const NO_SHADOW = new Set(['stone_bridge', 'earthwork', 'stepRocks', 'rockA', 'rockC', 'logsBig', 'picket', 'garden', 'barrels']);
   function shadows(list) {
     const MD = CW.MODELS, items = list.filter(o => MD[o.kind] && MD[o.kind].norm === 'meters' && !NO_SHADOW.has(o.kind)), n = items.length; if (!n) return null;

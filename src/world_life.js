@@ -61,7 +61,7 @@ CW.WorldLife = (function () {
       vec3 p = position * aB.w; p.y += (aA.y > 0.5 ? 0.55 * flap + 0.12 : 0.0) * aB.w + p.z * bank;
       vec3 w = vec3(cxz.x + fw.x * p.x + sd.x * p.z, aF.w + p.y + 6.0 * sin(uT * 0.3 + aB.z * 5.0), cxz.y + fw.y * p.x + sd.y * p.z);
       vCol = vec3(0.07, 0.055, 0.05); vN = vec3(0.0, 1.0, 0.0); vec4 mv = viewMatrix * vec4(w, 1.0); vDist = -mv.z; gl_Position = projectionMatrix * mv; }`;
-  const FS = `uniform vec3 uFog; uniform vec2 uFogR; varying vec3 vCol, vN; varying float vDist; const vec3 SUN = vec3(-0.5, 0.75, 0.25);
+  const FS = `uniform vec3 uFog; uniform vec2 uFogR; varying vec3 vCol, vN; varying float vDist; const vec3 SUN = ${CW.SUN.glsl};
     void main() { vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n; float ndl = clamp((dot(n, normalize(SUN)) + 0.25) / 1.25, 0.0, 1.0);
       vec3 sky = mix(vec3(0.20, 0.17, 0.12), vec3(0.38, 0.45, 0.55), n.y * 0.5 + 0.5), c = vCol * (sky * 0.8 + vec3(1.0, 0.93, 0.78) * 1.15 * ndl);
       gl_FragColor = vec4(mix(c, uFog, smoothstep(uFogR.x, uFogR.y, vDist)), 1.0);
@@ -72,7 +72,7 @@ CW.WorldLife = (function () {
   const SVS = `attribute vec3 aBase; attribute vec4 aPar; uniform sampler2D uOcc, uHgt; uniform vec2 uOccN, uHgtSz, uMapW; varying vec2 vQ;
     void main() { float hx = aPar.z; if (texture2D(uOcc, (vec2(mod(hx, uOccN.x), floor(hx / uOccN.x)) + 0.5) / uOccN).r > 0.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
       float c = cos(aPar.x), s = sin(aPar.x), L = (aPar.y > 1.5 ? 1.5 : 2.6) * ${PX.toFixed(2)} * aPar.w; vec2 q = position.xy * 2.0;
-      vec2 d = vec2(q.x * L * 0.62, q.y * L * 0.3), wp = aBase.xz + vec2(d.x * c + d.y * s, -d.x * s + d.y * c) + vec2(L * 0.35, -L * 0.1);
+      vec2 d = vec2(q.x * L * 0.62, q.y * L * 0.3), wp = aBase.xz + vec2(d.x * c + d.y * s, -d.x * s + d.y * c) - normalize(${CW.SUN.glsl}.xz) * L * 0.55;   /* the one sun */
       vQ = q; float gy = texture2D(uHgt, (wp + uMapW * 0.5) / uHgtSz).r; gl_Position = projectionMatrix * viewMatrix * vec4(wp.x, gy + 0.6, wp.y, 1.0); }`;
   const SFS = `varying vec2 vQ; void main() { gl_FragColor = vec4(0.06, 0.05, 0.09, (1.0 - smoothstep(0.35, 1.0, length(vQ))) * 0.42); }`;
 

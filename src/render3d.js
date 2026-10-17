@@ -14,7 +14,7 @@ CW.R3 = (function () {
   const S = { res: 1, dpr0: 0, tilt: TILT_DEF, anim: null, last: null, live: false, raf: 0, prev: 0, acc: 0, n: 0, win0: 0, mats: [], wk: new Map(), src: null, threads: null };
   // ---------- living landscape (sessions 17a-b, 18, 19): cloud shadows, 3D creek + wake, wind in the wheat, brook thread, tree sway, warm haze; one time uniform, patched into the ground material ----------
   const U = { uT: { value: 0 }, uLive: { value: 0 }, uWater: { value: null }, uForest: { value: null }, uWheatM: { value: null }, uWheatA: { value: null }, uWheatAvg: { value: window.THREE ? new THREE.Vector3(.31, .22, .084) : null }, uWheatOn: { value: 0 }, uMap: { value: window.THREE ? new THREE.Vector2(1, 1) : null },
-    uGround: { value: 0 }, uRelief: { value: null }, uPaint: { value: null }, uPData: { value: null }, uPaintOn: { value: 0 }, uPaintSz: { value: window.THREE ? new THREE.Vector2(1, 1) : null }, uHgt: { value: null }, uHgtSz: { value: window.THREE ? new THREE.Vector2(1, 1) : null }, uDet: { value: 1 }, uGA: { value: null }, uGW0: { value: null }, uGW1: { value: null } };   // world-mesh pass: tiled ground textures + terrain weight maps
+    uGround: { value: 0 }, uRelief: { value: null }, uPaint: { value: null }, uPData: { value: null }, uPaintOn: { value: 0 }, uPaintSz: { value: window.THREE ? new THREE.Vector2(1, 1) : null }, uHgt: { value: null }, uHgtSz: { value: window.THREE ? new THREE.Vector2(1, 1) : null }, uDet: { value: 1 }, uShade: { value: null }, uGA: { value: null }, uGW0: { value: null }, uGW1: { value: null } };   // world-mesh pass: tiled ground textures + terrain weight maps
   const GLSL_NOISE = `
     float cwH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float cwN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -32,7 +32,7 @@ CW.R3 = (function () {
   const GROUND_CH = { g: [[0, 1]], o: [[0, 1]], f: [[3, 1]], h: [[4, 1]], t: [[4, 1]], x: [[4, 1]], k: [[5, 1]], s: [[6, 1]], w: [[0, 1]], b: [[0, 1]], d: [[7, .3], [0, .7]] };   // 17 Oct: river hexes are meadow; the mud band follows the water itself (uWater), not the hex
   const GLSL_GROUND = `
     uniform sampler2DArray uGA; uniform sampler2D uGW0, uGW1; uniform float uGround; uniform sampler2D uRelief; uniform vec2 uHgtSz;
-    uniform sampler2D uPaint, uPData; uniform float uPaintOn; uniform vec2 uPaintSz;
+    uniform sampler2D uPaint, uPData, uShade; uniform float uPaintOn; uniform vec2 uPaintSz;
     // painted-diorama reboot (17 Oct): the colour map (src/world_paint.js) decides the colour; the tiled photos add only fine grain (their
     // brightness against their own average), chosen by what grows there: meadow grass, crop stalks or leaf litter. Cereal strips shimmer in the wind.
     float cwGrain(float L, vec2 p) { vec3 a = texture(uGA, vec3(p / 190.0, L)).rgb, b = textureLod(uGA, vec3(p / 190.0, L), 9.0).rgb;
@@ -45,16 +45,17 @@ CW.R3 = (function () {
       float cl = dot(col, vec3(0.3, 0.59, 0.11)); col = max(mix(vec3(cl), col, mix(1.12, 1.4, cereal)), 0.0);   /* the bluish sky fill + filmic tone curve wash colours out: put the painting's saturation back */
       return col * vec3(1.74, 1.68, 1.58); }   /* calibrated (17 Oct): under the low sun + fill light a flat lit meadow now shows about the painted colour */
     // terrain pass (17 Oct): the land reads as land. Relief map: r = crest (+) / hollow (-) against the land ~2 hexes around, g = near water.
-    const vec3 CW_SUN = vec3(-0.9363, 0.2809, 0.2809);   // same direction as the scene's sun light
+    const vec3 CW_SUN = ${CW.SUN.glsl};   // same direction as the scene's sun light
     vec3 cwRelief(vec3 col, vec2 p, vec3 n) {
       vec4 rl = texture2D(uRelief, p / uHgtSz); float rel = rl.r * 2.0 - 1.0, wet = rl.g, sl = clamp(1.0 - n.y, 0.0, 1.0), lum = dot(col, vec3(0.3, 0.59, 0.11));
       float dry = smoothstep(0.04, 0.55, rel) * (0.55 + 0.45 * cwN(p / 90.0));                       // crests and knoll tops dry toward straw
       col = mix(col, vec3(lum) * vec3(1.30, 1.10, 0.60), dry * (uPaintOn > 0.5 ? 0.22 : 0.5));
       col *= mix(vec3(1.0), vec3(0.82, 0.95, 0.84), clamp(max(smoothstep(0.04, 0.5, -rel), wet * 0.75), 0.0, 1.0));   // hollows and creek bottoms deep and lush
+      col *= mix(vec3(0.56, 0.60, 0.74), vec3(1.0), rl.b * texture2D(uShade, p / uMap).r);   /* first-look: baked ambient occlusion (terrain creases x woods/trees/buildings), cool and soft */
       vec2 dr = normalize(n.xz + vec2(1e-4)), pr = vec2(-dr.y, dr.x);                                  // steep faces: worn soil in streaks down the fall line
       float st = cwN(vec2(dot(p, dr) / 40.0, dot(p, pr) / 6.0)) * 0.7 + cwN(p / 23.0) * 0.3, wo = smoothstep(0.07, 0.22, sl) * smoothstep(0.48, 0.76, st);
       col = mix(col, vec3(0.30, 0.235, 0.15) * (0.8 + 0.4 * cwN(p / 9.0)), wo * 0.55);
-      float sd = dot(n, CW_SUN) - CW_SUN.y; return col * (uPaintOn > 0.5 ? clamp(1.0 + 0.35 * sd, 0.84, 1.14) : clamp(1.0 + 0.7 * sd, 0.68, 1.25)); }   // hill shading on top of the scene light
+      float sd = dot(n, CW_SUN) - CW_SUN.y; return col * (uPaintOn > 0.5 ? clamp(1.0 + 0.55 * sd, 0.76, 1.2) : clamp(1.0 + 0.7 * sd, 0.68, 1.25)); }   // hill shading on top of the scene light
 
     vec3 cwT(float L, vec2 q, float rot) { float c = cos(rot), s = sin(rot); return texture(uGA, vec3(mat2(c, -s, s, c) * q, L)).rgb; }
     // two lookups per layer at different rotation / scale / offset, blended by mid-scale noise, so the 512 px repeat never lines up
@@ -224,7 +225,7 @@ CW.R3 = (function () {
       const img = new Image(); img.onload = () => { tex.image = img; tex.needsUpdate = true; if (S.ribbon) S.ribbon.visible = true; if (!S.live && S.last) try { ren.render(scene, cam); } catch (e) {} }; img.src = CW.WATERFLOW.src;
       S.rmat = new THREE.ShaderMaterial({ vertexShader: RIB_VS, fragmentShader: RIB_FS, side: THREE.DoubleSide, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
         uniforms: { uAtlas: { value: tex }, uT: U.uT, uLive: U.uLive, uFps: { value: 6 }, uMap: U.uMap, uWake: WK.uWake, uWBox: WK.uWBox, uWTx: WK.uWTx,
-          uSun: { value: new THREE.Vector3(-1000, 300, 300).normalize() }, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } } });
+          uSun: { value: new THREE.Vector3(...CW.SUN.dir) }, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } } });
       S.rtex = tex; }
     const m = new THREE.Mesh(geo, S.rmat); m.renderOrder = 1; m.frustumCulled = false; m.visible = !!S.rtex.image; S.ribbon = m; scene.add(m);
   }
@@ -473,11 +474,44 @@ CW.R3 = (function () {
       return a; };
     const wl = mk(CW.R * .5 / q, cx => lines(cx, rw * 2.6, 34)), big = bl(HF, Math.round(CW.R * 1.6 / q / 1.7)), wet = bl(wl, 4),   // wetness spreads from the water lines, not from whole hexes
       rel = new Uint8Array(w * h * 4), hg = new Uint16Array(w * h * 4), half = THREE.DataUtils.toHalfFloat;
-    for (let i = 0; i < HF.length; i++) { rel[i * 4] = Math.max(0, Math.min(255, 128 + (HF[i] - big[i]) / (EX * 1.1) * 127)); rel[i * 4 + 1] = Math.min(255, wet[i] * 330); rel[i * 4 + 3] = 255; hg[i * 4] = half(HF[i]); hg[i * 4 + 3] = half(1); }
+    let AO; try { AO = bakeAO(w, h, q); } catch (e) { console.warn('ambient occlusion skipped:', e.message); AO = new Float32Array(w * h).fill(1); }   // (e) first-look phase 1, see bakeAO
+    for (let i = 0; i < HF.length; i++) { rel[i * 4] = Math.max(0, Math.min(255, 128 + (HF[i] - big[i]) / (EX * 1.1) * 127)); rel[i * 4 + 1] = Math.min(255, wet[i] * 330); rel[i * 4 + 2] = Math.round(AO[i] * 255); rel[i * 4 + 3] = 255; hg[i * 4] = half(HF[i]); hg[i * 4 + 3] = half(1); }
     const T = (data, type) => { const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, type); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; return t; };
     if (U.uRelief.value) U.uRelief.value.dispose(); if (U.uHgt.value) U.uHgt.value.dispose();
     S.hMin = HF.reduce((a, v) => Math.min(a, v), 0); U.uRelief.value = T(rel, THREE.UnsignedByteType); U.uHgtSz.value.set(w * q, h * q); U.uHgt.value = T(hg, THREE.HalfFloatType);
   }
+  // first-look phase 1: ambient occlusion, baked ONCE per map load (zero cost per frame, so it is on at every Detail level).
+  // Soft sky light can't reach creases at the foot of slopes, woods edges, or the ground under trees and buildings, so those read darker
+  // and cooler. 1 = open sky, lower = hidden. Stored in the relief texture's spare blue channel; the ground and grass shaders apply it.
+  function bakeAO(w, h, q) {
+    const out = new Float32Array(w * h), D = [[1, 0], [.707, .707], [0, 1], [-.707, .707], [-1, 0], [-.707, -.707], [0, -1], [.707, -.707]], ST = [2, 4, 7, 11, 16, 24];
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const k = j * w + i, h0 = HF[k]; let occ = 0;   // terrain: how high the land around rises (8 directions, up to ~2 hexes)
+      for (const [dx, dy] of D) { let m = 0; for (const st of ST) { const x = Math.round(i + dx * st), y = Math.round(j + dy * st); if (x < 0 || y < 0 || x >= w || y >= h) break;
+          const t = (HF[y * w + x] - h0) / (st * q); if (t > m) m = t; } occ += m / Math.sqrt(1 + m * m); }
+      out[k] = 1 - .9 * occ / 8; }
+    return out; }
+  // first-look phase 1b: the SHADE map, baked once per map load at half resolution (zero cost per frame). r = soft occlusion under woods,
+  // trees and buildings; g = their long sun shadows from the one sun. The ground reads r (the ground's own shadow shapes are live quads,
+  // so a tree that steps aside for a unit takes its shadow with it); grass blades and crop stalks read both, so a shadow darkens the grass
+  // standing in it instead of hiding under it.
+  function bakeShade() {
+    const q = 2, w = Math.ceil(MW / q), h = Math.ceil(MH / q), S3 = CW.SUN.dir, cot = CW.SUN.cot, dx = -S3[0] / Math.hypot(S3[0], S3[2]), dy = -S3[2] / Math.hypot(S3[0], S3[2]);
+    const mk = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true }); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.scale(1 / q, 1 / q); return [c, x]; };
+    const [ca, a] = mk(), [cs, b] = mk(), trees = CW.WorldTrees && CW.TREES ? CW.WorldTrees.place(M) : [], T = CW.TREES && CW.TREES.species;
+    a.fillStyle = 'rgba(0,0,0,.26)'; M.all.forEach(([hc, hr]) => { if (M.ter(hc, hr) === 'f') { CW.hexPath(a, ...CW.center(hc, hr), CW.R * 1.02); a.fill(); } });
+    a.fillStyle = 'rgba(0,0,0,.20)';
+    for (const t of trees) { const m = T[t.sp] && T[t.sp][t.v]; if (!m) continue; const R = Math.max(1.2, m.r) * t.s, C = m.hc * t.sy * cot, Ra = R / S3[1];
+      a.beginPath(); a.arc(t.x, t.y, R * 1.4, 0, 6.283); a.fill();
+      b.save(); b.translate(t.x, t.y); b.rotate(Math.atan2(dy, dx)); b.fillStyle = `rgba(0,0,0,${Math.min(.5, t.sh * 1.7)})`;
+      b.beginPath(); b.ellipse(C, 0, Ra, R, 0, 0, 6.283); b.fill(); b.fillRect(0, -R * .1, C, R * .2); b.restore(); }
+    if (CW.WorldStructures && CW.MODELS) for (const o of CW.WorldStructures.place(M)) { const m = CW.MODELS[o.kind]; if (!m || m.norm !== 'meters' || o.kind === 'broadleaf') continue;
+      const hw = (m.x || m.w) * (o.sx || 1) * .5, hd = m.d * (o.sz || 1) * .5, L = Math.min(m.h, 12) * (o.sy || 1) * cot;
+      a.fillStyle = 'rgba(0,0,0,.16)'; a.save(); a.translate(o.x, o.y); a.rotate(-(o.yaw || 0)); a.fillRect(-hw * 1.3, -hd * 1.3, hw * 2.6, hd * 2.6); a.restore();
+      b.fillStyle = 'rgba(0,0,0,.09)'; for (let k = 0; k <= 8; k++) { b.save(); b.translate(o.x + dx * L * k / 8, o.y + dy * L * k / 8); b.rotate(-(o.yaw || 0)); b.fillRect(-hw, -hd, hw * 2, hd * 2); b.restore(); } }
+    const soft = (cv, px) => { const o = document.createElement('canvas'); o.width = w; o.height = h; const ox = o.getContext('2d', { willReadFrequently: true }); ox.filter = `blur(${px}px)`; ox.drawImage(cv, 0, 0); const d = ox.getImageData(0, 0, w, h).data; o.width = 0; return d; };   // draw sharp, blur ONCE (a filter on every draw call is very slow)
+    const da = soft(ca, 2), db = soft(cs, 1), out = new Uint8Array(w * h * 4); ca.width = cs.width = 0;
+    for (let i = 0; i < w * h; i++) { out[i * 4] = da[i * 4]; out[i * 4 + 1] = db[i * 4]; out[i * 4 + 3] = 255; }
+    if (U.uShade.value) U.uShade.value.dispose(); const t = new THREE.DataTexture(out, w, h, THREE.RGBAFormat); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; U.uShade.value = t; }
   const hAt = (x, y) => { const fx = Math.max(0, Math.min(HW - 1.001, x / 4)), fy = Math.max(0, Math.min(HH - 1.001, y / 4)), ix = fx | 0, iy = fy | 0, tx = fx - ix, ty = fy - iy, i = iy * HW + ix;
     return (HF[i] * (1 - tx) + HF[i + 1] * tx) * (1 - ty) + (HF[i + HW] * (1 - tx) + HF[i + HW + 1] * tx) * ty; };
   const W3 = (x, y) => new THREE.Vector3(x - MW / 2, hAt(x, y), y - MH / 2);
@@ -493,7 +527,8 @@ CW.R3 = (function () {
       U.uWater.value = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat); U.uWater.value.needsUpdate = true;
       U.uForest.value = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat); U.uForest.value.needsUpdate = true;
       U.uWheatM.value = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat); U.uWheatM.value.needsUpdate = true;
-      buildHeights(); scene = new THREE.Scene();
+      U.uShade.value = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat); U.uShade.value.needsUpdate = true;
+      buildHeights(); try { bakeShade(); } catch (e) { console.warn('shade map skipped:', e.message); } scene = new THREE.Scene();
       // sky: blue overhead fading to a warm haze at the horizon; the haze also swallows distant ground (aerial perspective)
       const sk = document.createElement('canvas'); sk.width = 4; sk.height = 256; const kx = sk.getContext('2d'), g = kx.createLinearGradient(0, 0, 0, 256);
       g.addColorStop(0, '#5f84ad'); g.addColorStop(.45, '#a9b9c4'); g.addColorStop(.62, '#d9c49a'); g.addColorStop(1, '#d9c49a'); kx.fillStyle = g; kx.fillRect(0, 0, 4, 256);
@@ -519,7 +554,7 @@ CW.R3 = (function () {
       skirt.rotateX(-Math.PI / 2); skirt.position.y = Math.min(-2, (S.hMin || 0) - 3); /* always under the lowest river bed */ skirt.receiveShadow = true; scene.add(skirt); S.skirt = skirt;
       // light: low golden-hour sun from the west, plus sky fill
       scene.add(new THREE.HemisphereLight(0xcfdcec, 0x6a5a3a, 1.0));
-      const sun = new THREE.DirectionalLight(0xffdcb4, 3.6); sun.position.set(-1000, 300, 300); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
+      const SD = CW.SUN.dir, sun = new THREE.DirectionalLight(0xffdcb4, 3.6 * CW.SUN.flat0 / SD[1]); sun.position.set(SD[0] * 1100, SD[1] * 1100, SD[2] * 1100);   /* one sun (src/world_sun.js); strength keeps flat ground as bright as before */ sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
       Object.assign(sun.shadow.camera, { left: -MW * .6, right: MW * .6, top: MH * .75, bottom: -MH * .75, near: 10, far: 4000 }); sun.shadow.bias = -.0006; sun.shadow.normalBias = 1.2; scene.add(sun);
       cam = new THREE.PerspectiveCamera(FOV, 1, 20, 12000);
       canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); fail('graphics context lost'); });

@@ -33,9 +33,9 @@ CW.WorldGrass = (function () {
   }
 
   const VS = `attribute vec4 aB, aD; attribute vec2 aOff;
-    uniform vec2 uCen, uMap, uOccN, uHgtSz; uniform float uS, uSP, uZoom, uT, uLive, uWrap, uReed, uCrop, uDetG; uniform sampler2D uGD, uHex, uOcc, uRelief, uPaint, uPData; uniform float uPaintOn; uniform vec2 uPaintSz; varying vec3 vCol; varying float vDist;
+    uniform vec2 uCen, uMap, uOccN, uHgtSz; uniform float uS, uSP, uZoom, uT, uLive, uWrap, uReed, uCrop, uDetG; uniform sampler2D uGD, uHex, uOcc, uRelief, uShade, uPaint, uPData; uniform float uPaintOn; uniform vec2 uPaintSz; varying vec3 vCol; varying float vDist;
     ${CW.WorldTrees.WIND}
-    const vec3 SUN = vec3(-0.5, 0.75, 0.25);
+    const vec3 SUN = ${CW.SUN.glsl};
     float h1(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
       return mix(mix(h1(i), h1(i + vec2(1.0, 0.0)), f.x), mix(h1(i + vec2(0.0, 1.0)), h1(i + vec2(1.0, 1.0)), f.x), f.y); }
@@ -79,6 +79,8 @@ CW.WorldGrass = (function () {
       vec3 V = normalize(cameraPosition - wp); float face = 0.85 + 0.3 * dot(perp, normalize(SUN.xz)) * aB.w * 0.5;
       float back = pow(clamp(dot(-V, normalize(SUN)), 0.0, 1.0), 3.0) * t;
       col = col * (0.62 + 0.55 * face) * mix(1.0, 0.5, gd.a) + col * vec3(0.9, 1.0, 0.3) * back * 0.8;
+      vec4 shd = texture2D(uShade, (p + uMap * 0.5) / uMap);   /* first-look: baked occlusion (r) and long sun shadows (g), so shadows darken the blades standing in them */
+      col *= mix(vec3(0.56, 0.60, 0.74), vec3(1.0), rl.b * shd.r) * mix(vec3(0.42, 0.46, 0.62), vec3(1.0), shd.g);
       vCol = col; vec4 mv = viewMatrix * vec4(wp, 1.0); vDist = -mv.z; gl_Position = projectionMatrix * mv; }`;
   const FS = `uniform vec3 uFog; uniform vec2 uFogR; varying vec3 vCol; varying float vDist;
     void main() { vec3 c = mix(vCol, uFog, smoothstep(uFogR.x, uFogR.y, vDist)); gl_FragColor = vec4(c, 1.0);
@@ -163,7 +165,7 @@ CW.WorldGrass = (function () {
     const D = mapData(M, W3, MW, MH), n = Math.round(Sz / SP), lat = new Float32Array(n * n * 2);
     let q = 0; for (let m = 0; m < n; m++) for (let j = 0; j <= m; j++) for (let i = 0; i <= m; i++) if (Math.max(i, j) === m) lat.set([(i + .5) * SP, (j + .5) * SP], 2 * q++);   // square shells: the first m*m tufts make an m x m square
     const base = { uGD: { value: D.T1 }, uHex: { value: D.T2 }, uOcc: { value: occ }, uOccN: { value: new THREE.Vector2(M.cols, M.rows) }, uMap: { value: new THREE.Vector2(MW, MH) },
-      uCen: { value: new THREE.Vector2() }, uS: { value: Sz }, uSP: { value: SP }, uPaint: U.uPaint || { value: null }, uPData: U.uPData || { value: null }, uPaintOn: U.uPaintOn || { value: 0 }, uPaintSz: U.uPaintSz || { value: new THREE.Vector2(1, 1) }, uDetG: U.uDet || { value: 1 }, uRelief: U.uRelief, uHgtSz: U.uHgtSz, uZoom: { value: 3 }, uT: U.uT, uLive: U.uLive, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
+      uCen: { value: new THREE.Vector2() }, uS: { value: Sz }, uSP: { value: SP }, uPaint: U.uPaint || { value: null }, uPData: U.uPData || { value: null }, uPaintOn: U.uPaintOn || { value: 0 }, uPaintSz: U.uPaintSz || { value: new THREE.Vector2(1, 1) }, uDetG: U.uDet || { value: 1 }, uRelief: U.uRelief, uShade: U.uShade || { value: null }, uHgtSz: U.uHgtSz, uZoom: { value: 3 }, uT: U.uT, uLive: U.uLive, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
     const grass = mesh(tuft(false, 99), lat, Object.assign({}, base, { uWrap: { value: 1 }, uReed: { value: 0 }, uCrop: { value: 0 } }));
     const rs = reedSpots(M, D.water, MW, MH), reeds = rs.length ? mesh(tuft(true, 77), rs, Object.assign({}, base, { uWrap: { value: 0 }, uReed: { value: 1 }, uCrop: { value: 0 } })) : null;
     const P = CW.WORLD && CW.WorldPaint && U.uPaintOn && U.uPaintOn.value ? CW.WorldPaint.build(M) : null;

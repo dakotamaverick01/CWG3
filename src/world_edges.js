@@ -136,7 +136,7 @@ CW.WorldEdges = (function () {
       vec3 col = vCol;
       if (vK > 0.5) {
         vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N;
-        vec3 S = normalize(vec3(-0.5, 0.75, 0.25)), V = normalize(cameraPosition - vW);
+        vec3 S = normalize(${CW.SUN.glsl}), V = normalize(cameraPosition - vW);
         float lam = max(dot(N, S), 0.0);
         vec3 hemi = mix(vec3(0.40, 0.37, 0.32), vec3(0.50, 0.53, 0.58), N.y * 0.5 + 0.5);                   // warm ground bounce .. cool sky
         vec3 base = vCol / max((0.52 + 0.62 * max(dot(N, S), 0.0)) * (0.9 + 0.2 * vR) * vec3(1.04, 0.99, 0.88), vec3(0.05));   // undo the vertex light, keep colour + AO
