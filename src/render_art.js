@@ -131,7 +131,7 @@ CW.paintArtFeatures = function (ctx, M, rand, pat, wet, objs) {   // objs (3D vi
   const skip = !!(objs && objs.skipEdges), PW = skip ? (c, nm, ...a) => (/^(fsw_|wall_|fence_)/.test(nm) ? 0 : CW.prop(c, nm, ...a)) : CW.prop, PS = skip ? () => 0 : CW.prop;
   // crop rows: painted wheat strokes
   const realCrops = !!(CW.ARTI && CW.ARTI.ground.wheat_0 && CW.ARTI.ground.corn_0), K = CW.cropKind(M);
-  if (realCrops) each('c', (x, y, c, r) => { if (K.get(c + ',' + r) !== 'corn' && rand() < .3) put(y + R * .3, () => P(ctx, rand() < .6 ? 'clut_sheaves' : 'clut_haystack', x + (rand() - .5) * R, y + R * .3, R * .45)); });
+  if (realCrops) each('c', (x, y, c, r) => { if (K.get(c + ',' + r) !== 'corn' && rand() < .3) put(y + R * .3, () => { const a = rand(), b = rand(); if (!(objs && objs.skipCrops)) P(ctx, a < .6 ? 'clut_sheaves' : 'clut_haystack', x + (b - .5) * R, y + R * .3, R * .45); }); });   // the colour map paints its own sheaves
   else each('c', (x, y) => { ctx.save(); CW.hexPath(ctx, x, y, R * 1.02); ctx.clip();
     for (let i = -R; i < R; i += 5) for (let j = -R; j < R; j += 3) { const px = x + j + (rand() - .5) * 2, py = y + i + j * .18 + (rand() - .5) * 2, l = 3 + rand() * 3;
       ctx.strokeStyle = rand() < .7 ? `rgba(${230 + rand() * 25},${190 + rand() * 30},${90 + rand() * 30},.55)` : 'rgba(110,80,30,.45)'; ctx.lineWidth = 1.1;

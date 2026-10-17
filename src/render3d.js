@@ -8,13 +8,13 @@
 // Revert = set CW.WORLD = false here (or open play.html?world=0 to compare without editing).
 CW.WORLD = true; try { if (/[?&]world=0\b/.test(location.search)) CW.WORLD = false; } catch (e) {}
 CW.R3 = (function () {
-  const EX = 36, FOV = 30, TILT_MIN = 40, TILT_MAX = 80, TILT_DEF = 40;   // EX = height of one level in map px (hex radius 44); terrain pass 17 Oct: 30 -> 36 so hills read
+  const EX = 54, FOV = 30, TILT_MIN = 40, TILT_MAX = 80, TILT_DEF = 40;   // EX = height of one level in map px (hex radius 44); 17 Oct: 30 -> 36 -> 54 (painted-diorama reboot: hills like Ultimate General; visual only)
   let ok = false, failed = false, ren, scene, cam, dcv, dctx, dtex, ttex, terrainSrc = null, M, MW, MH, HW, HH, HF, glc;
   const FULLRES = /[?&]fullres\b/.test(location.search);   // play.html?fullres keeps full board resolution (no automatic step-down)
   const S = { res: 1, dpr0: 0, tilt: TILT_DEF, anim: null, last: null, live: false, raf: 0, prev: 0, acc: 0, n: 0, win0: 0, mats: [], wk: new Map(), src: null, threads: null };
   // ---------- living landscape (sessions 17a-b, 18, 19): cloud shadows, 3D creek + wake, wind in the wheat, brook thread, tree sway, warm haze; one time uniform, patched into the ground material ----------
   const U = { uT: { value: 0 }, uLive: { value: 0 }, uWater: { value: null }, uForest: { value: null }, uWheatM: { value: null }, uWheatA: { value: null }, uWheatAvg: { value: window.THREE ? new THREE.Vector3(.31, .22, .084) : null }, uWheatOn: { value: 0 }, uMap: { value: window.THREE ? new THREE.Vector2(1, 1) : null },
-    uGround: { value: 0 }, uRelief: { value: null }, uHgt: { value: null }, uHgtSz: { value: window.THREE ? new THREE.Vector2(1, 1) : null }, uDet: { value: 1 }, uGA: { value: null }, uGW0: { value: null }, uGW1: { value: null } };   // world-mesh pass: tiled ground textures + terrain weight maps
+    uGround: { value: 0 }, uRelief: { value: null }, uPaint: { value: null }, uPData: { value: null }, uPaintOn: { value: 0 }, uPaintSz: { value: window.THREE ? new THREE.Vector2(1, 1) : null }, uHgt: { value: null }, uHgtSz: { value: window.THREE ? new THREE.Vector2(1, 1) : null }, uDet: { value: 1 }, uGA: { value: null }, uGW0: { value: null }, uGW1: { value: null } };   // world-mesh pass: tiled ground textures + terrain weight maps
   const GLSL_NOISE = `
     float cwH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float cwN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -32,17 +32,29 @@ CW.R3 = (function () {
   const GROUND_CH = { g: [[0, 1]], o: [[0, 1]], f: [[3, 1]], h: [[4, 1]], t: [[4, 1]], x: [[4, 1]], k: [[5, 1]], s: [[6, 1]], w: [[0, 1]], b: [[0, 1]], d: [[7, .3], [0, .7]] };   // 17 Oct: river hexes are meadow; the mud band follows the water itself (uWater), not the hex
   const GLSL_GROUND = `
     uniform sampler2DArray uGA; uniform sampler2D uGW0, uGW1; uniform float uGround; uniform sampler2D uRelief; uniform vec2 uHgtSz;
+    uniform sampler2D uPaint, uPData; uniform float uPaintOn; uniform vec2 uPaintSz;
+    // painted-diorama reboot (17 Oct): the colour map (src/world_paint.js) decides the colour; the tiled photos add only fine grain (their
+    // brightness against their own average), chosen by what grows there: meadow grass, crop stalks or leaf litter. Cereal strips shimmer in the wind.
+    float cwGrain(float L, vec2 p) { vec3 a = texture(uGA, vec3(p / 190.0, L)).rgb, b = textureLod(uGA, vec3(p / 190.0, L), 9.0).rgb;
+      return dot(a, vec3(0.3, 0.59, 0.11)) / max(dot(b, vec3(0.3, 0.59, 0.11)), 0.02); }
+    vec3 cwPaintG(vec2 p) { vec2 uv = p / uPaintSz; vec3 col = texture2D(uPaint, uv).rgb; vec4 dd = texture2D(uPData, uv);
+      float woods = smoothstep(0.6, 0.9, dd.b), cereal = smoothstep(0.2, 0.32, dd.b) * (1.0 - woods);
+      float g = cwGrain(woods > 0.5 ? 4.0 : cereal > 0.5 ? 2.0 : 0.0, p);
+      col *= mix(1.0, clamp(g, 0.45, 1.7), woods > 0.5 ? 0.55 : 0.42);
+      if (uLive > 0.5 && cereal > 0.0) { float band = cwN(p / 140.0 + vec2(uT * 0.22, uT * 0.08)) * 0.7 + cwN(p / 47.0 + vec2(uT * 0.4, 0.0)) * 0.3; col *= 1.0 + cereal * 0.16 * (band - 0.5); }
+      float cl = dot(col, vec3(0.3, 0.59, 0.11)); col = max(mix(vec3(cl), col, mix(1.12, 1.4, cereal)), 0.0);   /* the bluish sky fill + filmic tone curve wash colours out: put the painting's saturation back */
+      return col * vec3(1.74, 1.68, 1.58); }   /* calibrated (17 Oct): under the low sun + fill light a flat lit meadow now shows about the painted colour */
     // terrain pass (17 Oct): the land reads as land. Relief map: r = crest (+) / hollow (-) against the land ~2 hexes around, g = near water.
     const vec3 CW_SUN = vec3(-0.9363, 0.2809, 0.2809);   // same direction as the scene's sun light
     vec3 cwRelief(vec3 col, vec2 p, vec3 n) {
       vec4 rl = texture2D(uRelief, p / uHgtSz); float rel = rl.r * 2.0 - 1.0, wet = rl.g, sl = clamp(1.0 - n.y, 0.0, 1.0), lum = dot(col, vec3(0.3, 0.59, 0.11));
       float dry = smoothstep(0.04, 0.55, rel) * (0.55 + 0.45 * cwN(p / 90.0));                       // crests and knoll tops dry toward straw
-      col = mix(col, vec3(lum) * vec3(1.30, 1.10, 0.60), dry * 0.5);
+      col = mix(col, vec3(lum) * vec3(1.30, 1.10, 0.60), dry * (uPaintOn > 0.5 ? 0.22 : 0.5));
       col *= mix(vec3(1.0), vec3(0.82, 0.95, 0.84), clamp(max(smoothstep(0.04, 0.5, -rel), wet * 0.75), 0.0, 1.0));   // hollows and creek bottoms deep and lush
       vec2 dr = normalize(n.xz + vec2(1e-4)), pr = vec2(-dr.y, dr.x);                                  // steep faces: worn soil in streaks down the fall line
       float st = cwN(vec2(dot(p, dr) / 40.0, dot(p, pr) / 6.0)) * 0.7 + cwN(p / 23.0) * 0.3, wo = smoothstep(0.07, 0.22, sl) * smoothstep(0.48, 0.76, st);
       col = mix(col, vec3(0.30, 0.235, 0.15) * (0.8 + 0.4 * cwN(p / 9.0)), wo * 0.55);
-      float sd = dot(n, CW_SUN) - CW_SUN.y; return col * clamp(1.0 + 0.7 * sd, 0.68, 1.25); }   // hill shading on top of the scene light
+      float sd = dot(n, CW_SUN) - CW_SUN.y; return col * (uPaintOn > 0.5 ? clamp(1.0 + 0.35 * sd, 0.84, 1.14) : clamp(1.0 + 0.7 * sd, 0.68, 1.25)); }   // hill shading on top of the scene light
 
     vec3 cwT(float L, vec2 q, float rot) { float c = cos(rot), s = sin(rot); return texture(uGA, vec3(mat2(c, -s, s, c) * q, L)).rgb; }
     // two lookups per layer at different rotation / scale / offset, blended by mid-scale noise, so the 512 px repeat never lines up
@@ -54,6 +66,9 @@ CW.R3 = (function () {
       if (i == 3) return cwTile(4.0, p) * vec3(0.80, 0.90, 0.64);                                         // woods floor in the trees' shade
       return cwTile(float(i + 1), p); }
     vec3 cwGround(vec2 p) {
+      if (uPaintOn > 0.5) { vec3 c = cwPaintG(p); float ob = max(max(-p.x, p.x - uPaintSz.x), max(-p.y, p.y - uPaintSz.y));
+        if (ob > 0.0) { float l = dot(c, vec3(0.3, 0.59, 0.11)); c = mix(c, mix(vec3(l), c, 0.55) * (0.55 + 0.2 * cwF(p / 260.0)), smoothstep(0.0, 380.0, ob)); }   // beyond the board: quieter, darker land
+        return c; }
       vec2 wp = p + (vec2(cwN(p / 70.0), cwN(p / 70.0 + 31.7)) - 0.5) * 34.0;                          // wobble the hex borders
       vec4 a = texture2D(uGW0, wp / uMap), b = texture2D(uGW1, wp / uMap);
       float sw = max(dot(a, vec4(1.0)) + dot(b, vec4(1.0)), 1e-3); a /= sw; b /= sw;                         // weights sum to 1, so no seam can open a gap
@@ -294,9 +309,17 @@ CW.R3 = (function () {
   function buildFeatures() {
     if (!CW.paintArtFeatures || !CW.ARTI) return null; const c = document.createElement('canvas'); c.width = MW; c.height = MH; const x = c.getContext('2d'), wet = M.weather === 'mud' || M.weather === 'rain';
     const pat = (name, rot = 0, ox = 0, oy = 0, s = .42) => { const p = x.createPattern(CW.ARTI.ground[name], 'repeat'); p.setTransform(new DOMMatrix().translate(ox, oy).rotate(rot).scale(s)); return p; };
-    const objs = { trees: [], skipEdges: !!CW.WORLD }; CW.paintArtFeatures(x, M, CW.rng(11), pat, wet, objs); S.trees = objs.trees; return c; }
+    const objs = { trees: [], skipEdges: !!CW.WORLD, skipCrops: !!(CW.WORLD && U.uPaintOn.value) }; CW.paintArtFeatures(x, M, CW.rng(11), pat, wet, objs); S.trees = objs.trees; return c; }
+  // the colour map (src/world_paint.js): one texture for the whole board + a small data texture (stalk heights, grass density, woods, cereal)
+  function buildPaint() {
+    if (!CW.WORLD || !CW.WorldPaint) { U.uPaintOn.value = 0; return; }
+    try { const P = CW.WorldPaint.build(M), mk = (cv, srgb) => { const t = new THREE.CanvasTexture(cv); t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+        t.flipY = false; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.anisotropy = srgb ? Math.min(8, ren.capabilities.getMaxAnisotropy()) : 1; t.needsUpdate = true; return t; };
+      if (U.uPaint.value) U.uPaint.value.dispose(); if (U.uPData.value) U.uPData.value.dispose();
+      U.uPaint.value = mk(P.paint, true); U.uPData.value = mk(P.data, false); U.uPaintSz.value.set(P.paint.width / P.K, P.paint.height / P.K); U.uPaintOn.value = 1; S.paint = P;
+    } catch (e) { console.warn('colour map skipped, tiled ground in use:', e.message); U.uPaintOn.value = 0; } }
   function buildGround(img) {
-    let feat = null; try { if (buildGroundTex()) { buildGroundWeights(); feat = buildFeatures(); } } catch (e) { console.warn('tiled ground skipped, painted map in use:', e.message); feat = null; }
+    let feat = null; try { if (buildGroundTex()) { buildGroundWeights(); buildPaint(); feat = buildFeatures(); } } catch (e) { console.warn('tiled ground skipped, painted map in use:', e.message); feat = null; }
     if (feat && CW.WORLD) S.trees = [];   // T4: painted layer is back (buildings, crops, bridge, labels) minus roads/brooks/walls/fences (skipEdges); painted-coordinate trees stay out (T2 meshes)
     U.uGround.value = feat ? 1 : 0; try { buildObjects(feat ? S.trees || [] : []); } catch (e) { console.warn('3D trees skipped:', e.message); }
     if (CW.WORLD && CW.WorldTrees) { if (S.wt) { CW.WorldTrees.dispose(); S.wt = 0; } try { if (!S.occ || S.occ.image.width !== M.cols || S.occ.image.height !== M.rows) { S.occ = new THREE.DataTexture(new Uint8Array(M.cols * M.rows * 4), M.cols, M.rows, THREE.RGBAFormat); S.occ.needsUpdate = true; if (S.objs) S.objs.forEach(o => { if (o.material.uniforms.uOcc) o.material.uniforms.uOcc.value = S.occ; }); }
@@ -304,7 +327,8 @@ CW.R3 = (function () {
     if (CW.WORLD && CW.WorldGrass && S.occ) { try { S.wg = CW.WorldGrass.build({ scene, M, W3, occ: S.occ, U, det: U.uDet.value }); } catch (e) { console.warn('grass skipped:', e.message); } }   // living fields: grass blades + reeds
     if (CW.WORLD && CW.WorldEdges) { try { CW.WorldEdges.dispose(); S.we = CW.WorldEdges.build({ scene, M, W3, U }); } catch (e) { console.warn('3D edges skipped:', e.message); } }
     if (CW.WORLD && CW.WorldStructures) { try { CW.WorldStructures.dispose(); CW.WorldStructures.build({ scene, M, W3, U }); } catch (e) { console.warn('3D structures skipped:', e.message); } }
-    if (CW.WORLD && CW.WorldLife && S.occ) { try { S.wl = CW.WorldLife.build({ scene, M, W3, occ: S.occ, U }); } catch (e) { console.warn('animals and birds skipped:', e.message); } }   // 17 Oct: grazing herds + vultures   // T5: town, farm, bridge, ford, fort, knoll, mill from hex letters + map `structures`   // T4: roads, brooks, walls, fences from the map's edge data   // T2: mesh trees from hex letters if (S.feat && S.feat !== feat) { S.feat.width = S.feat.height = 0; } S.feat = feat;
+    if (CW.WORLD && CW.WorldLife && S.occ) { try { S.wl = CW.WorldLife.build({ scene, M, W3, occ: S.occ, U }); } catch (e) { console.warn('animals and birds skipped:', e.message); } }   // 17 Oct: grazing herds + vultures   // T5: town, farm, bridge, ford, fort, knoll, mill from hex letters + map `structures`   // T4: roads, brooks, walls, fences from the map's edge data   // T2: mesh trees from hex letters 
+    if (S.feat && S.feat !== feat) { S.feat.width = S.feat.height = 0; } S.feat = feat;   /* was hidden inside a // comment since T5; frees the old feature canvas on map reload */
     ttex.image = feat || img; ttex.needsUpdate = true; }
   // ---------- world pass 2: trees and the mill as objects standing on the mesh ----------
   // Upright camera-facing billboards from the props atlas, all trees in ONE instanced draw (plus one for their soft ground shadows).
@@ -478,7 +502,13 @@ CW.R3 = (function () {
       const geo = new THREE.PlaneGeometry(MW, MH, M.cols * 10, M.rows * 10); geo.rotateX(-Math.PI / 2);
       const p = geo.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, hAt(p.getX(i) + MW / 2, p.getZ(i) + MH / 2)); geo.computeVertexNormals();
       ttex = new THREE.CanvasTexture(document.createElement('canvas')); ttex.colorSpace = THREE.SRGBColorSpace; ttex.anisotropy = ren.capabilities.getMaxAnisotropy();
-      const ground = new THREE.Mesh(geo, living(new THREE.MeshStandardMaterial({ map: ttex, roughness: 1, metalness: 0 }), true)); ground.receiveShadow = ground.castShadow = true; scene.add(ground);
+      // the ground runs on past the board edge (heights clamp to the edge) and fades into darker countryside in the shader: no cliff, a diorama frame
+      // board cells at full detail; m extra rings of cells outside it stretch out (wider and wider) to EB beyond the edge: cheap
+      const EB = Math.round(Math.max(MW, MH) * .6), m = 10, nx = M.cols * 10 + 2 * m, ny = M.rows * 10 + 2 * m, gb = new THREE.PlaneGeometry(1, 1, nx, ny); gb.rotateX(-Math.PI / 2);
+      const warp = (k, n, inner) => k < m ? -inner / 2 - EB * ((m - k) / m) ** 1.7 : k > n - m ? inner / 2 + EB * ((k - n + m) / m) ** 1.7 : -inner / 2 + (k - m) / (n - 2 * m) * inner;
+      { const P = gb.attributes.position, UV = gb.attributes.uv; for (let i = 0; i < P.count; i++) { const X = warp(i % (nx + 1), nx, MW), Z = warp(Math.floor(i / (nx + 1)), ny, MH);
+          P.setXYZ(i, X, hAt(X + MW / 2, Z + MH / 2), Z); UV.setXY(i, (X + MW / 2) / MW, 1 - (Z + MH / 2) / MH); } gb.computeVertexNormals(); gb.computeBoundingSphere(); }
+      const ground = new THREE.Mesh(gb, living(new THREE.MeshStandardMaterial({ map: ttex, roughness: 1, metalness: 0 }), true)); ground.receiveShadow = ground.castShadow = true; scene.add(ground);
       // decal: the markings canvas laid over the same hills
       dcv = document.createElement('canvas'); dcv.width = MW; dcv.height = MH; dctx = dcv.getContext('2d');
       dtex = new THREE.CanvasTexture(dcv); dtex.colorSpace = THREE.SRGBColorSpace; dtex.anisotropy = ren.capabilities.getMaxAnisotropy();
@@ -486,19 +516,22 @@ CW.R3 = (function () {
       decal.renderOrder = 2; scene.add(decal);
       // land beyond the board so the edge sits on countryside, not in a void
       const skirt = new THREE.Mesh(new THREE.PlaneGeometry(MW * 8, MH * 8), living(new THREE.MeshStandardMaterial({ color: 0x6f6a3e, roughness: 1 }), false));
-      skirt.rotateX(-Math.PI / 2); skirt.position.y = Math.min(-2, (S.hMin || 0) - 3);   // always under the lowest river bed skirt.receiveShadow = true; scene.add(skirt); S.skirt = skirt;
+      skirt.rotateX(-Math.PI / 2); skirt.position.y = Math.min(-2, (S.hMin || 0) - 3); /* always under the lowest river bed */ skirt.receiveShadow = true; scene.add(skirt); S.skirt = skirt;
       // light: low golden-hour sun from the west, plus sky fill
       scene.add(new THREE.HemisphereLight(0xcfdcec, 0x6a5a3a, 1.0));
       const sun = new THREE.DirectionalLight(0xffdcb4, 3.6); sun.position.set(-1000, 300, 300); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
       Object.assign(sun.shadow.camera, { left: -MW * .6, right: MW * .6, top: MH * .75, bottom: -MH * .75, near: 10, far: 4000 }); sun.shadow.bias = -.0006; sun.shadow.normalBias = 1.2; scene.add(sun);
       cam = new THREE.PerspectiveCamera(FOV, 1, 20, 12000);
       canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); fail('graphics context lost'); });
+      // painted-diorama grade (17 Oct): a gentle colour grade + vignette on the 3D view only (CSS, so it costs nothing in the shaders); units stay crisp on top
+      try { canvas.style.filter = 'contrast(1.06)'; const vg = document.createElement('div'); vg.id = 'vign';
+        vg.style.cssText = 'position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 75% 70% at 50% 45%,rgba(0,0,0,0) 55%,rgba(24,18,8,.42) 100%)'; canvas.after(vg); S.vign = vg; } catch (e) {}
       ok = true;
     } catch (e) { fail(e.message); }
     return ok;
   }
-  function fail(why) { if (failed) return; failed = true; ok = false; console.warn('3D battlefield off, using flat map:', why); if (glc) glc.style.display = 'none'; CW.toast && CW.toast('3D battlefield unavailable here, so the flat map is in use'); }
-  const tex = img => { if (img === terrainSrc) return; terrainSrc = img; buildGround(img); try { buildWater(); } catch (e) { console.warn('water mask skipped:', e.message); } try { buildForest(); } catch (e) { console.warn('forest mask skipped:', e.message); } try { buildWheat(); } catch (e) { console.warn('wheat skipped:', e.message); }   // grass under the board edge, from the painting's own colours
+  function fail(why) { if (failed) return; failed = true; ok = false; console.warn('3D battlefield off, using flat map:', why); if (glc) glc.style.display = 'none'; if (S.vign) S.vign.style.display = 'none'; CW.toast && CW.toast('3D battlefield unavailable here, so the flat map is in use'); }
+  const tex = img => { if (img === terrainSrc) return; terrainSrc = img; buildGround(img); try { buildWater(); } catch (e) { console.warn('water mask skipped:', e.message); } try { buildForest(); } catch (e) { console.warn('forest mask skipped:', e.message); } try { if (!U.uPaintOn.value) buildWheat(); } catch (e) { console.warn('wheat skipped:', e.message); }   // grass under the board edge, from the painting's own colours
     try { const d = img.getContext('2d').getImageData(0, 0, 40, 40).data; let r = 0, g = 0, b = 0; for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; } const n = d.length / 4;
       S.skirt.material.color.setRGB(r / n / 255, g / n / 255, b / n / 255, THREE.SRGBColorSpace).multiplyScalar(.85); } catch (e) { /* tainted or lost: keep default */ } };
   // ---------- camera ----------

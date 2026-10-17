@@ -43,12 +43,18 @@ CW.WorldTrees = (function () {
         else if (q < .1) for (let k = 0; k < 2 + (rand() * 2 | 0); k++) add('shrub', cx + (rand() - .5) * R, cy + (rand() - .5) * R * .8, PX * (1 + rand() * .5), rand, hex, .2);
       }
     }
-    if (CW.WorldEdges) for (const e of CW.WorldEdges.edgesOf(M, 'fence')) {   // hedgerow trees on ~12% of fence edges, a shrub on some more
+    const fenceList = CW.WORLD && CW.WorldPaint ? CW.WorldPaint.fenceSegs(M) : CW.WorldEdges ? CW.WorldEdges.edgesOf(M, 'fence') : [];
+    for (const e of fenceList) {   // hedgerow trees on ~12% of fence sections (17 Oct: along the farm-shaped fences), a shrub on some more
       const rand = CW.rng(e.k + 7), q = rand(), dx = e.q[0] - e.p[0], dy = e.q[1] - e.p[1], L = Math.hypot(dx, dy), t = .2 + rand() * .6, sd = rand() < .5 ? -1 : 1, o = 3 + rand() * 3;
       const x = e.p[0] + dx * t - dy / L * o * sd, y = e.p[1] + dy * t + dx / L * o * sd, hx = CW.pixelToHex(M, x, y), hex = hx ? hx[1] * M.cols + hx[0] : 0;
       if (q < .12) { add(pick(FIELD, rand(), { cedar: 1.8 }), x, y, PX * (.95 + rand() * .3), rand, hex, .28); add('shrub', x + dx * .12, y + dy * .12, PX * (1 + rand() * .4), rand, hex, .18); }
       else if (q < .27) add('shrub', x, y, PX * (1 + rand() * .5), rand, hex, .18);
     }
+    for (const rd of (M.roads || [])) {   // 17 Oct: the odd tree along the roads (Ultimate General-style tree lines), never in fields, woods, towns or water
+      const pts = rd.p.map(p => CW.center(...p)), rand = CW.rng(pts.length * 977 + Math.round(pts[0][0] * 3 + pts[0][1]));
+      for (let i = 0; i < pts.length - 1; i++) { const a = pts[i], b = pts[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
+        for (let t = 0; t < L; t += 30) { if (rand() > .17) continue; const sd = rand() < .5 ? -1 : 1, o = (rd.major ? 15 : 12) + rand() * 7, x = a[0] + dx * t / L - dy / L * o * sd, y = a[1] + dy * t / L + dx / L * o * sd, hx = CW.pixelToHex(M, x, y);
+          if (!hx || 'ctwbdfxos'.includes(M.ter(...hx))) continue; add(pick(FIELD, rand(), { dead: .2 }), x, y, PX * (.95 + rand() * .3), rand, hx[1] * M.cols + hx[0], .28); } } }
     if (CW.WorldStructures) for (const o of CW.WorldStructures.place(M)) {   // town and farm yard trees (world_structures.js picks the spots)
       if (o.kind !== 'broadleaf') continue; const rand = CW.rng(Math.round(o.x * 13 + o.y * 7)), sp = pick(YARD, o.rnd), hx = CW.pixelToHex(M, o.x, o.y);
       add(sp, o.x, o.y, Math.max(PX * .8, Math.min(PX * 1.3, o.sy / T[sp][0].h * (sp === 'apple' ? .5 : 1.1))), rand, hx ? hx[1] * M.cols + hx[0] : 0, .28);

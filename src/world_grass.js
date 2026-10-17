@@ -33,7 +33,7 @@ CW.WorldGrass = (function () {
   }
 
   const VS = `attribute vec4 aB, aD; attribute vec2 aOff;
-    uniform vec2 uCen, uMap, uOccN, uHgtSz; uniform float uS, uSP, uZoom, uT, uLive, uWrap, uReed, uCrop, uDetG; uniform sampler2D uGD, uHex, uOcc, uRelief; varying vec3 vCol; varying float vDist;
+    uniform vec2 uCen, uMap, uOccN, uHgtSz; uniform float uS, uSP, uZoom, uT, uLive, uWrap, uReed, uCrop, uDetG; uniform sampler2D uGD, uHex, uOcc, uRelief, uPaint, uPData; uniform float uPaintOn; uniform vec2 uPaintSz; varying vec3 vCol; varying float vDist;
     ${CW.WorldTrees.WIND}
     const vec3 SUN = vec3(-0.5, 0.75, 0.25);
     float h1(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -42,15 +42,18 @@ CW.WorldGrass = (function () {
     void main() {
       vec2 p = aOff;
       if (uWrap > 0.5) { p = aOff + uS * floor((uCen - aOff) / uS + 0.5); p += (vec2(h1(p), h1(p + 7.3)) - 0.5) * uSP; }
-      vec2 uv = (p + uMap * 0.5) / uMap; vec4 gd = texture2D(uGD, uv); vec4 rl = texture2D(uRelief, (p + uMap * 0.5) / uHgtSz); float rel = rl.r * 2.0 - 1.0;   // relief: crests dry, hollows lush. gd: r height, g grass density, b tall wet grass, a forest floor
-      float r1 = h1(p * 1.37), r2 = h1(p * 0.71 + 3.1), r3 = h1(p * 2.11 + 9.7), k = uCrop > 0.5 ? 1.0 : smoothstep(1.7, 2.6, uZoom);   // crops stay full height at every zoom they draw at (17 Oct: they used to shrink away below 2.6)
+      vec2 uv = (p + uMap * 0.5) / uMap; vec4 gd = texture2D(uGD, uv); vec2 puv = (p + uMap * 0.5) / uPaintSz; vec4 pd = texture2D(uPData, puv); vec3 pcol = textureLod(uPaint, puv, 2.0).rgb; pcol = max(mix(vec3(dot(pcol, vec3(0.3, 0.59, 0.11))), pcol, uCrop > 0.5 ? 1.4 : 1.12), 0.0);
+      if (uPaintOn > 0.5) { gd.g = pd.g; gd.a = smoothstep(0.6, 0.9, pd.b); }   // colour map: grass density + woods floor come from the painting
+      vec4 rl = texture2D(uRelief, (p + uMap * 0.5) / uHgtSz); float rel = rl.r * 2.0 - 1.0;   // relief: crests dry, hollows lush. gd: r height, g grass density, b tall wet grass, a forest floor
+      float r1 = h1(p * 1.37), r2 = h1(p * 0.71 + 3.1), r3 = h1(p * 2.11 + 9.7), k = uCrop > 0.5 ? (uPaintOn > 0.5 ? smoothstep(1.15, 1.9, uZoom) : 1.0) : smoothstep(1.7, 2.6, uZoom);   // with the colour map, stalks fade in (same colour as the painted field under them)   // crops stay full height at every zoom they draw at (17 Oct: they used to shrink away below 2.6)
       if (uWrap > 0.5 && uCrop < 0.5) { if (r1 > gd.g * (0.55 + 0.9 * vn(p / 23.0))) k = 0.0; k *= 1.0 - smoothstep(uS * 0.36, uS * 0.5, length(p - uCen)); }
       if (uCrop > 0.5 && r1 < (uDetG < 0.5 ? 0.33 : 0.0) + 0.45 * (1.0 - smoothstep(0.9, 1.8, uZoom))) k = 0.0;   // fewer (wider) tufts when zoomed out; Low detail thinner rows
       bool fl = aD.w > 0.5 && aD.w < 1.5;
       if (fl && (r3 > 0.006 + 0.08 * smoothstep(0.6, 0.86, vn(p / 170.0 + 11.0)) || gd.b > 0.5 || gd.a > 0.5)) k = 0.0;
       if (k < 0.02) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
       vec2 hx = floor(texture2D(uHex, uv).rg * 255.0 + 0.5); float occ = step(0.5, texture2D(uOcc, (hx + 0.5) / uOccN).r) * (1.0 - uReed);
-      float H = (uCrop > 1.5 ? 10.0 : uCrop > 0.5 ? 4.6 : uReed > 0.5 ? 8.0 : 3.0) * mix(1.0, 1.8, gd.b) * mix(1.0, 0.6, gd.a) * (0.65 + 0.7 * r2) * aD.y * k;
+      float crH = uPaintOn > 0.5 && uCrop > 0.5 ? (uCrop > 1.5 ? step(0.8, pd.r) : clamp(pd.r / 0.59, 0.0, 1.1)) : 1.0; if (crH < 0.1) k = 0.0;
+      float H = crH * (uCrop > 1.5 ? 10.0 : uCrop > 0.5 ? 4.6 : uReed > 0.5 ? 8.0 : 3.0) * mix(1.0, 1.8, gd.b) * mix(1.0, 0.6, gd.a) * (0.65 + 0.7 * r2) * aD.y * k;
       float a = aD.x + r3 * 6.2832, t = aB.z; vec2 dir = vec2(cos(a), sin(a)), perp = vec2(-dir.y, dir.x);
       float tt = fl ? 1.0 : t, lean = (aD.w > 4.5 ? 0.55 : uCrop > 0.5 ? 0.05 : uReed > 0.5 ? 0.08 : 0.28 + 0.25 * r1) * (1.0 + 2.6 * occ);
       vec2 bend = dir * H * lean * tt * tt;
@@ -71,6 +74,8 @@ CW.WorldGrass = (function () {
       if (uCrop > 0.5 && uCrop < 1.5) col = mix(vec3(0.07, 0.06, 0.015), vec3(0.50, 0.35, 0.09) * (0.85 + 0.3 * r2), pow(t, 0.6)) * mix(1.0, 0.8, smoothstep(0.55, 0.9, vn(p / 40.0)));
       if (uCrop > 1.5) col = aD.w > 3.5 && aD.w < 4.5 ? vec3(0.40, 0.31, 0.12) : mix(vec3(0.02, 0.04, 0.01), vec3(0.10, 0.21, 0.04) * (0.8 + 0.4 * r2), pow(t, 0.6));
       float fk = mix(r2, vn(p / 55.0 + 4.0), 0.75); if (fl) col = fk < 0.4 ? vec3(0.85, 0.83, 0.72) : fk < 0.75 ? vec3(0.9, 0.62, 0.05) : vec3(0.38, 0.14, 0.55);
+      if (uPaintOn > 0.5 && !fl && uReed < 0.5 && !(aD.w > 1.5 && aD.w < 2.5) && !(uCrop > 1.5 && aD.w > 3.5 && aD.w < 4.5)) {   // blades and stalks take their colour from the colour map under them
+        col = uCrop > 0.5 ? mix(pcol * 0.38, pcol * (uCrop > 1.5 ? 1.05 : 1.08), pow(t, 0.6)) : mix(pcol * 0.30, pcol * 1.22, pow(t, 0.7)); }
       vec3 V = normalize(cameraPosition - wp); float face = 0.85 + 0.3 * dot(perp, normalize(SUN.xz)) * aB.w * 0.5;
       float back = pow(clamp(dot(-V, normalize(SUN)), 0.0, 1.0), 3.0) * t;
       col = col * (0.62 + 0.55 * face) * mix(1.0, 0.5, gd.a) + col * vec3(0.9, 1.0, 0.3) * back * 0.8;
@@ -145,6 +150,12 @@ CW.WorldGrass = (function () {
     return out;
   }
 
+  // colour-map crops: the stalk positions world_paint.js laid out along each field's rows, grouped into ~2-hex chunks (one culled mesh each)
+  function cropChunks(C, MW, MH) { const out = [], cell = 160;
+    for (const [list, kind] of [[C.wheat, 1], [C.corn, 2]]) { const m = new Map();
+      for (let i = 0; i < list.length; i += 2) { const k = Math.floor(list[i] / cell) + ',' + Math.floor(list[i + 1] / cell); (m.get(k) || m.set(k, []).get(k)).push(list[i] - MW / 2, list[i + 1] - MH / 2); }
+      m.forEach((pts, k) => { const [i, j] = k.split(',').map(Number); out.push({ kind, cx: (i + .5) * cell - MW / 2, cy: (j + .5) * cell - MH / 2, pts: new Float32Array(pts), r: cell * .75 }); }); }
+    return out; }
   // env: { scene, M, W3, occ, U }
   function build(env) {
     const { scene, M, W3, occ, U } = env, [MW, MH] = CW.mapSize(M); dispose();
@@ -152,12 +163,14 @@ CW.WorldGrass = (function () {
     const D = mapData(M, W3, MW, MH), n = Math.round(Sz / SP), lat = new Float32Array(n * n * 2);
     let q = 0; for (let m = 0; m < n; m++) for (let j = 0; j <= m; j++) for (let i = 0; i <= m; i++) if (Math.max(i, j) === m) lat.set([(i + .5) * SP, (j + .5) * SP], 2 * q++);   // square shells: the first m*m tufts make an m x m square
     const base = { uGD: { value: D.T1 }, uHex: { value: D.T2 }, uOcc: { value: occ }, uOccN: { value: new THREE.Vector2(M.cols, M.rows) }, uMap: { value: new THREE.Vector2(MW, MH) },
-      uCen: { value: new THREE.Vector2() }, uS: { value: Sz }, uSP: { value: SP }, uDetG: U.uDet || { value: 1 }, uRelief: U.uRelief, uHgtSz: U.uHgtSz, uZoom: { value: 3 }, uT: U.uT, uLive: U.uLive, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
+      uCen: { value: new THREE.Vector2() }, uS: { value: Sz }, uSP: { value: SP }, uPaint: U.uPaint || { value: null }, uPData: U.uPData || { value: null }, uPaintOn: U.uPaintOn || { value: 0 }, uPaintSz: U.uPaintSz || { value: new THREE.Vector2(1, 1) }, uDetG: U.uDet || { value: 1 }, uRelief: U.uRelief, uHgtSz: U.uHgtSz, uZoom: { value: 3 }, uT: U.uT, uLive: U.uLive, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
     const grass = mesh(tuft(false, 99), lat, Object.assign({}, base, { uWrap: { value: 1 }, uReed: { value: 0 }, uCrop: { value: 0 } }));
     const rs = reedSpots(M, D.water, MW, MH), reeds = rs.length ? mesh(tuft(true, 77), rs, Object.assign({}, base, { uWrap: { value: 0 }, uReed: { value: 1 }, uCrop: { value: 0 } })) : null;
-    const geoW = tuft(false, 55, 1), geoC = tuft(false, 66, 2), crops = cropHexes(M, MW, MH).map(h => {
+    const P = CW.WORLD && CW.WorldPaint && U.uPaintOn && U.uPaintOn.value ? CW.WorldPaint.build(M) : null;
+    const chunks = P ? cropChunks(P.crops, MW, MH) : cropHexes(M, MW, MH);
+    const geoW = tuft(false, 55, 1), geoC = tuft(false, 66, 2), crops = chunks.map(h => {
       const me = mesh(h.kind === 2 ? geoC : geoW, h.pts, Object.assign({}, base, { uWrap: { value: 0 }, uReed: { value: 0 }, uCrop: { value: h.kind } }));
-      const y = W3(h.cx + MW / 2, h.cy + MH / 2).y; me.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(h.cx, y, h.cy), CW.R * 1.2); me.frustumCulled = true; scene.add(me); return me; });
+      const y = W3(h.cx + MW / 2, h.cy + MH / 2).y; me.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(h.cx, y, h.cy), h.r || CW.R * 1.2); me.frustumCulled = true; scene.add(me); return me; });
     scene.add(grass); if (reeds) scene.add(reeds);
     // each frame, before three.js sorts the scene: where is the view centre on the ground, and how far are we zoomed in?
     const f = new THREE.Vector3(), sz = new THREE.Vector2(), hg = (x, z) => { const i = Math.max(0, Math.min(D.w - 1, (x + MW / 2) / Q | 0)), j = Math.max(0, Math.min(D.h - 1, (z + MH / 2) / Q | 0)); return D.hgt[j * D.w + i]; };
@@ -168,7 +181,7 @@ CW.WorldGrass = (function () {
       ren.getSize(sz); const zoom = sz.y / (2 * Math.hypot(x - o.x, y - o.y, z - o.z) * Math.tan(cam.fov * Math.PI / 360));
       base.uCen.value.set(x, z); base.uZoom.value = zoom;
       const E = Math.hypot(sz.x / 2, sz.y / 2 / Math.max(.4, -f.y)) / zoom * 1.25, m = Math.min(n, Math.ceil(2 * E / SP));   // only as much lattice as the screen shows
-      base.uS.value = m * SP; grass.geometry.instanceCount = m * m; grass.visible = on && zoom > 1.7; if (reeds) reeds.visible = on && zoom > 1.7; crops.forEach(c => { c.visible = on && zoom > [1.25, 0.8, 0.7][det]; }); /* crops stay 3D down to the usual play zoom (1.0) */ };
+      base.uS.value = m * SP; grass.geometry.instanceCount = m * m; grass.visible = on && zoom > 1.7; if (reeds) reeds.visible = on && zoom > 1.7; crops.forEach(c => { c.visible = on && zoom > (P ? Math.max(1.15, [1.4, 1.15, 1.15][det]) : [1.25, 0.8, 0.7][det]); }); /* crops stay 3D down to the usual play zoom (1.0) */ };
     state = { scene, parts: [grass, reeds, ...crops].filter(Boolean), tex: [D.T1, D.T2], prev };
     return n * n + rs.length / 2;
   }

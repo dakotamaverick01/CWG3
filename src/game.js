@@ -9,6 +9,7 @@ const cv = document.getElementById('map'), sx = cv.getContext('2d'), mapCache = 
 let cx = sx;   // cx = where the current layer draws: the screen, or (3D battlefield) the markings decal laid over the hills
 if (CW.R3 && glc) CW.R3.init(M, glc);
 // session 19d: living landscape defaults ON; the slow-frame guard switches it off for this session only (not saved)
+try { if (!localStorage.getItem('cwg3.grid1017')) { G.opts.grid = false; CW.saveOpts(G.opts); localStorage.setItem('cwg3.grid1017', '1'); } } catch (e) {}
 try { if (!localStorage.getItem('cwg3.liv19')) { G.opts.living = true; CW.saveOpts(G.opts); localStorage.setItem('cwg3.liv19', '1'); } } catch (e) {}
 if (CW.R3 && CW.R3.onSlow) CW.R3.onSlow(ms => { G.opts.living = false; CW.R3.setLive(false); draw(); toast(`Living landscape switched off: frames were taking ${Math.round(ms)} ms. Turn it back on in Options`); });
 // session 18: wading infantry/cavalry feed the creek wake (guns and leaders don't); only units the player can see
@@ -145,6 +146,8 @@ function nextReady(kind) { const rc = readyCounts(); if (!rc) return; const list
   toast(`${u.level === 'bde' ? u.bdeName : u.name}: ${kind === 'fire' ? 'can fire — click a red-ringed enemy' : u.level === 'bde' ? 'can still move — click or drag where it should go' : `${Math.floor(u.mp)} movement left`} (${(i + 1) % list.length + 1}/${list.length})`); }
 CW.nextReady = nextReady;
 // "can fire" icon: a white gun-sight, centred on x,y
+// many hexes as ONE path (filled once), so shading has no doubled seams along shared edges (17 Oct)
+function hexUnion(list) { const P = new Path2D(); list.forEach(p => { const [x, y] = CW.center(...p); for (let d = 0; d < 6; d++) { const c = CW.corner(x, y, d); if (d) P.lineTo(c[0], c[1]); else P.moveTo(c[0], c[1]); } P.closePath(); }); return P; }
 function muskets(x, y, k) { cx.save(); cx.strokeStyle = '#fff'; cx.lineWidth = 1.6; cx.lineCap = 'round'; cx.beginPath(); cx.arc(x, y, k * .8, 0, 7);
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { cx.moveTo(x + dx * k * .35, y + dy * k * .35); cx.lineTo(x + dx * k * 1.25, y + dy * k * 1.25); } cx.stroke(); cx.restore(); }
 // ---------- drawing ----------
@@ -161,6 +164,8 @@ function draw() { if (G.aiBusy && !G._view) return asViewer(draw);
   if (G.weather === 'fog') { cx.fillStyle = 'rgba(225,228,230,.35)'; cx.fillRect(0, 0, MW, MH); }
   if (CW.TINT[ph]) { cx.fillStyle = CW.TINT[ph]; cx.fillRect(0, 0, MW, MH); }
   if (G.opts.grid) { cx.strokeStyle = 'rgba(0,0,0,.18)'; cx.lineWidth = 1; M.all.forEach(p => { CW.hexPath(cx, ...CW.center(...p)); cx.stroke(); }); }
+  else if (G.hover && M.in(...G.hover)) { const [hx, hy] = CW.center(...G.hover), rr = CW.R * 4.6; cx.lineWidth = 1.2;   // 17 Oct: no grid on the ground; a soft local grid fades out around the mouse
+    M.all.forEach(p => { const [x, y] = CW.center(...p), d = Math.hypot(x - hx, y - hy); if (d > rr) return; cx.strokeStyle = `rgba(255,248,220,${(.34 * (1 - d / rr)).toFixed(3)})`; CW.hexPath(cx, x, y); cx.stroke(); }); }
   if (G.tool.heights) { cx.font = '700 12px system-ui,sans-serif'; cx.textAlign = 'center';
     M.all.forEach(p => { const [x, y] = CW.center(...p), hv = M.h(...p); cx.fillStyle = `rgba(${hv > 2 ? '120,60,20' : '20,40,80'},${.08 + hv * .06})`; CW.hexPath(cx, x, y, R - 1); cx.fill(); cx.fillStyle = '#fff'; cx.strokeStyle = 'rgba(0,0,0,.7)'; cx.lineWidth = 3; cx.strokeText(hv, x, y - R * .55); cx.fillText(hv, x, y - R * .55); }); }
   let shed = null;
@@ -168,7 +173,7 @@ function draw() { if (G.aiBusy && !G._view) return asViewer(draw);
   else if (G.tool.sight && G.sel) shed = CW.viewshed(M, [G.sel.c, G.sel.r], CW.TYPES[G.sel.type].sight + 2, CW.EYE(G.sel));
   if (shed) { cx.fillStyle = 'rgba(15,15,30,.5)'; M.all.forEach(p => { if (!shed.has(CW.key(...p))) { CW.hexPath(cx, ...CW.center(...p), R + .5); cx.fill(); } }); }
   if (G.reach && !shed) {
-    if (G.opts.showRange) { cx.fillStyle = 'rgba(10,12,16,.4)'; M.all.forEach(p => { if (!G.reach.has(CW.key(...p)) && !(p[0] === G.sel.c && p[1] === G.sel.r)) { CW.hexPath(cx, ...CW.center(...p), R + .5); cx.fill(); } }); }
+    if (G.opts.showRange) { cx.fillStyle = 'rgba(10,12,16,.4)'; cx.fill(hexUnion(M.all.filter(p => !G.reach.has(CW.key(...p)) && !(p[0] === G.sel.c && p[1] === G.sel.r)))); }   /* one shape: no seams between hexes */
     cx.strokeStyle = 'rgba(200,40,30,.55)'; cx.lineWidth = 2; cx.setLineDash([4, 4]);
     if (!contact) G.units.filter(e => e.side !== G.side && !e.gone && shown(e) && CW.exertsZOC(e)).forEach(e => CW.zocHexes(M, e).forEach(([c, r]) => { CW.hexPath(cx, ...CW.center(c, r), R - 5); cx.stroke(); }));
     cx.setLineDash([]);
@@ -179,7 +184,7 @@ function draw() { if (G.aiBusy && !G._view) return asViewer(draw);
   if (G.group) { cx.strokeStyle = 'rgba(255,255,255,.7)'; cx.lineWidth = 2; G.group.forEach(u => { CW.hexPath(cx, ...CW.center(u.c, u.r), R - 4); cx.stroke(); });
  }
   const block = G.group && G.blockRange && G.sel && G.sel.level === 'bde' && G.sel.side === G.side;
-  if (block && !shed && !contact && G.opts.showRange) { cx.fillStyle = 'rgba(10,12,16,.32)'; M.all.forEach(p => { if (!G.blockRange.has(CW.key(...p))) { CW.hexPath(cx, ...CW.center(...p), R + .5); cx.fill(); } }); }
+  if (block && !shed && !contact && G.opts.showRange) { cx.fillStyle = 'rgba(10,12,16,.32)'; cx.fill(hexUnion(M.all.filter(p => !G.blockRange.has(CW.key(...p))))); }
   let bpv = null; if (block && G.hover && !CW.unitsAt(G.units, ...G.hover).some(u => shown(u) && u.side !== G.side)) { try { bpv = CW.ORD.blockPreview(G.sel, G.hover, G.blockCache); } catch (err) { bpv = null; } }
   if (CW.ORD) CW.ORD.draw(cx, (orderDrag && orderDrag.pv) || bpv);
   if (G.hover) { cx.strokeStyle = '#f6e6a8'; cx.lineWidth = 2; CW.hexPath(cx, ...CW.center(...G.hover), R - 2); cx.stroke(); }

@@ -160,7 +160,8 @@ CW.WorldEdges = (function () {
     // fences: 2 pieces per hex edge, each pitched along the ground
     const EMm = CW.EDGEMESH, hOf = k => (EMm[k] && EMm[k].h) || .33;
     // fences: per hex edge one style (snake rail mostly, sometimes post-and-rail), 2 sections pitched along the ground, zig-zag phase random
-    for (const e of edgesOf(M, 'fence')) { const rand = CW.rng(e.k + 1), r0 = rand(), kind = r0 < .45 ? 'worm_a' : r0 < .82 ? 'worm_b' : 'post_rail';
+    const fences = CW.WORLD && CW.WorldPaint ? CW.WorldPaint.fenceSegs(M) : edgesOf(M, 'fence');   // 17 Oct: fenced fields get one fence along their farm-shaped outline
+    for (const e of fences) { const rand = CW.rng(e.k + 1), r0 = rand(), kind = r0 < .45 ? 'worm_a' : r0 < .82 ? 'worm_b' : 'post_rail';
       for (let h = 0; h < 2; h++) { const a = [e.p[0] + (e.q[0] - e.p[0]) * h / 2, e.p[1] + (e.q[1] - e.p[1]) * h / 2], b = [e.p[0] + (e.q[0] - e.p[0]) * (h + 1) / 2, e.p[1] + (e.q[1] - e.p[1]) * (h + 1) / 2],
           A = W3(...a), B = W3(...b), dx = B.x - A.x, dz = B.z - A.z, run = Math.hypot(dx, dz) || 1, flip = rand() < .5, k = run / 6.2;
         out.push({ kind, x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2, lift: 0, yaw: Math.atan2(-dz, dx) + (flip ? Math.PI : 0), pitch: Math.atan2(B.y - A.y, run) * (flip ? -1 : 1), rnd: rand(),

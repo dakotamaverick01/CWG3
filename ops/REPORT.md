@@ -1,25 +1,24 @@
 # REPORT (Claude's result for the last brief) — overwritten after each task
-Brief: 17 Oct, John in chat (Opus): finish living-fields piece 4, run terrain A/B/C, then a free creative look pass (world look only). Cap ~20% weekly usage.
+Brief: 17 Oct (night), John in chat (Opus): "painted diorama" visual reboot modelled on Ultimate General: Gettysburg. John's answers: painted + fading 3D close-up; hex grid hidden unless needed; much bigger hills; farm-shaped fields. Cap ~20% weekly.
 Branch / commit: main
-Result: DONE
+Result: DONE (first pass)
 
 ## What changed (≤5 lines)
-- Piece 4: Options > Battlefield detail (Auto/Low/Medium/High); slow-frame guard lowers detail before it ever turns Living off; far trees drop leaf cards by distance.
-- Terrain A/B: taller relief, knoll crowns, rolling ground, carved river/brook beds, slope shading + dry crests / lush hollows / soil streaks.
-- Terrain C: trees thin on steep slopes, sit into the slope, shadows lie on the hill; grass colour follows the relief; wildflower meadows.
-- New src/world_life.js: grazing cattle and sheep near farms/towns, vultures circling (Living only).
-- Fixes: skirt under the river beds; river hexes no longer show as bald hexagons.
+- One generated colour map decides ground colour at every zoom; grass and crop stalks copy their colour from it and fade in (no more look switching).
+- Farm-shaped fields in crop strips, fences along them; pasture patchwork; tree lines along fences and roads.
+- Hex grid hidden (soft local grid at the mouse; G shows all); out-of-reach shading without seams.
+- Hills 1.5x; land continues past the board edge into darker countryside; contrast + vignette.
 
 ## Files touched
-src/render3d.js, src/world_grass.js, src/world_trees.js, src/world_life.js (new), src/game.js, src/menu.js, play.html, tools/shot.py (hides the help pop-up), STATUS.md, ASSET_CREDITS.md, ops/BRIEF.md, docs/shots/look_1017_compare.jpg.
+src/world_paint.js (new), src/render3d.js, src/world_grass.js, src/world_edges.js, src/world_trees.js, src/render_art.js, src/game.js, play.html, CLAUDE.md, STATUS.md, ASSET_CREDITS.md, docs/shots/diorama_1017.jpg.
 
 ## How to revert
-Branch `backup-main-2026-10-17` = main before this pass (`git revert` the commit, or reset to that branch with John's OK).
+Branch `backup-main-2026-10-17b` = main before this pass.
 
 ## Evidence
-docs/shots/look_1017_compare.jpg (before/after: ridge, creek, knoll, forest, farm). Speed in STATUS.md (relative, software GL).
+docs/shots/diorama_1017.jpg (zoom 0.6 / 1.0 / 1.5 / 2.6, forest, east). Wheat reads gold at every zoom; measured colour of 3D stalks vs painted ground matched.
 
 ## Open questions for John / Grok
-1. Relief: hills read now but stay gentle (map heights are 0-4 and the camera never goes below 40 degrees). Want them taller (EX 36 -> 44) or a lower camera minimum?
-2. The sun is low in the west (late-afternoon shadows). Keep, or raise it toward midday?
-3. Animals and vultures: keep, more, or fewer?
+1. Unit art now clashes most with the world (UG uses many tiny figures). Next big item?
+2. Field strips (wheat/oats/stubble): keep the variety or make wheat fields solid gold?
+3. Labels ("Harper Creek") could be restyled as engraved map lettering like UG.
