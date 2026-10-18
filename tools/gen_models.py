@@ -132,8 +132,18 @@ def grist_mill():
     m.box('woodDark', -.15, 7.0, D / 2, .15, 7.3, D / 2 + 1.4)                                    # hoist beam
     for z in (-4.0, 0.0, 4.0):
         for y in (2.0, 5.4): m.window(-W / 2, y, z, .8, 1.1, L); m.window(W / 2, y, z, .8, 1.1, Rt)
+    cx, cy, R1 = W / 2 + 1.0, 3.6, 3.35   # the wheel itself is its own model, mill_wheel (it turns in the game)
+    m.box('iron', W / 2, cy - .15, -.15, cx + .9, cy + .15, .15)                                      # axle
+    m.box('wood', cx - .75, cy + R1 + .2, -D / 2 - 3, cx + .75, cy + R1 + .45, .3, mats={'top': 'water'})   # flume (head race) on trestle
+    for z in (-D / 2 - 2.5, -D / 2 + 1, -3.0): m.box('woodDark', cx - .1, 0, z - .1, cx + .1, cy + R1 + .2, z + .1)
+    return m
+
+
+def mill_wheel():
+    """overshot water wheel of the grist mill, centred on its axle (axle along X). Living world phase 1: the game spins it about X."""
+    m = Model('mill_wheel')
     # overshot wheel: two rims, spokes, paddles; axle along X, wheel in the Y-Z plane, centre (x=W/2+1.0, y=3.6, z=0)
-    cx, cy, R0, R1, seg = W / 2 + 1.0, 3.6, 3.0, 3.35, 18
+    cx, cy, R0, R1, seg = 0.0, 0.0, 3.0, 3.35, 18
     for x in (cx - .65, cx + .65):
         for k in range(seg):
             a0, a1 = k * 2 * math.pi / seg, (k + 1) * 2 * math.pi / seg
@@ -146,9 +156,6 @@ def grist_mill():
     for k in range(seg):
         a = (k + .5) * 2 * math.pi / seg; y, z = cy + R1 * math.cos(a), R1 * math.sin(a); ty, tz = -math.sin(a) * .35, math.cos(a) * .35
         m.quad('wood', (cx - .65, y - ty, z - tz), (cx + .65, y - ty, z - tz), (cx + .65, y + ty - math.cos(a) * .45, z + tz - math.sin(a) * .45), (cx - .65, y + ty - math.cos(a) * .45, z + tz - math.sin(a) * .45), centre=(cx, cy, 0))
-    m.box('iron', W / 2, cy - .15, -.15, cx + .9, cy + .15, .15)                                      # axle
-    m.box('wood', cx - .75, cy + R1 + .2, -D / 2 - 3, cx + .75, cy + R1 + .45, .3, mats={'top': 'water'})   # flume (head race) on trestle
-    for z in (-D / 2 - 2.5, -D / 2 + 1, -3.0): m.box('woodDark', cx - .1, 0, z - .1, cx + .1, cy + R1 + .2, z + .1)
     return m
 
 
@@ -491,7 +498,7 @@ def washline():
     return m
 
 
-MODELS = {f.__name__: f for f in (house_b, cottage, house_l, brick_b, store_b, barn_b, outhouse, picket, barrels, garden, post_rail, farmhouse, barn, church, store, brick_house, log_cabin, grist_mill, stone_bridge, earthwork, wedge_tent, haystack, well, shed)}
+MODELS = {f.__name__: f for f in (house_b, cottage, house_l, brick_b, store_b, barn_b, outhouse, picket, barrels, garden, post_rail, farmhouse, barn, church, store, brick_house, log_cabin, grist_mill, mill_wheel, stone_bridge, earthwork, wedge_tent, haystack, well, shed)}
 
 MODELS.update({f.__name__: f for f in (hero_house, hero_barn, outcrop, farm_dog, beehives, washline)})   # first-look phase 5
 MODELS.update({'wagon': lambda: wagon(False), 'wagon_covered': lambda: wagon(True),

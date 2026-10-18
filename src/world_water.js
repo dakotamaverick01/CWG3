@@ -58,9 +58,31 @@ CW.WorldWater = (function () {
     return out;
   }
 
+  // Living world phase 1: each map mill stands on the bank of open river (clear of bridge and ford). Its wheel wall faces the viewer
+  // (+map y); a short tailrace runs from under the wheel back into the river, so the wheel turns over real flowing water.
+  // Result per mill: { x, y (mill centre, map px), yaw (model +X = wheel side), wx, wy (wheel side unit), race: [pts] spring -> mouth }
+  function mills(M, rv, rw) {
+    const R = CW.R, K = 2.4, out = [], keep = M.all.filter(([q, r]) => 'bd'.includes(M.ter(q, r))).map(h => CW.center(...h));
+    for (const [c, r, kind] of (M.structures || [])) { if (kind !== 'mill' || !M.in(c, r)) continue;
+      const [cx, cy] = CW.center(c, r); let best = null;
+      for (const ln of rv) for (let i = 0; i < ln.length - 1; i++) { const p = ln[i], q = ln[i + 1], dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1;
+        for (let k = 0; k <= 12; k++) { const x = p[0] + dx * k / 12, y = p[1] + dy * k / 12;
+          if (keep.some(b => Math.hypot(b[0] - x, b[1] - y) < R * 1.85)) continue;
+          const d = Math.hypot(x - cx, y - cy); if (!best || d < best.d) best = { d, x, y, tx: dx / L, ty: dy / L }; } }
+      if (!best) continue;
+      let { x: px, y: py, tx, ty } = best; let nx = cx - px, ny = cy - py; const dt = nx * tx + ny * ty; nx -= tx * dt; ny -= ty * dt;
+      const nl = Math.hypot(nx, ny); if (nl < 1) { nx = -ty; ny = tx; } else { nx /= nl; ny /= nl; }       // n: from the river toward the land the mill stands on
+      const sx = ty >= 0 ? tx : -tx, sy = ty >= 0 ? ty : -ty;                                               // wheel side: along the river, toward the viewer
+      const half = rw * .52 * .84, D2 = 13 * K / 2, mx = px + nx * (half + D2 + 3), my = py + ny * (half + D2 + 3), off = 16;
+      const race = []; const a0 = D2 + 9, a1 = -(half + 5);                                                  // from the land end of the mill to inside the river
+      for (let k = 0; k <= 10; k++) { const a = a0 + (a1 - a0) * k / 10; race.push([mx + sx * off + nx * a, my + sy * off + ny * a]); }
+      out.push({ x: mx, y: my, yaw: Math.atan2(-sy, sx), wx: sx, wy: sy, race }); }
+    return out;
+  }
+
   function fromMap(M) {
-    const rv = rivers(M), rw = CW.R * .92;
-    return { river: rv[0] || null, rivers: rv, rw, streams: streams(M, rv, rw * .5) };
+    const rv = rivers(M), rw = CW.R * .92, ml = mills(M, rv, rw);
+    return { river: rv[0] || null, rivers: rv, rw, streams: streams(M, rv, rw * .5).concat(ml.map(m => m.race)), mills: ml };
   }
   return { fromMap, rivers, streams };
 })();

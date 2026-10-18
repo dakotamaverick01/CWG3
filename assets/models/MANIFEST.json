@@ -297,6 +297,12 @@
    "credit": "own",
    "ao": true
   },
+  "mill_wheel": {
+   "src": "gen/mill_wheel.glb",
+   "norm": "meters",
+   "credit": "own",
+   "ao": false
+  },
   "stone_bridge": {
    "src": "gen/stone_bridge.glb",
    "norm": "meters",

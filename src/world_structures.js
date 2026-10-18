@@ -133,16 +133,30 @@ CW.WorldStructures = (function () {
       } else if (t === 'b') {
         const [dx, dy] = crossDir(M, c, r); out.push({ kind: 'stone_bridge', x: cx, y: cy, lift: 0, yaw: side(dx, dy), pitch: 0, rnd: rand(), sx: K, sy: K, sz: K });
       } else if (t === 'd') {
-        const [dx, dy] = crossDir(M, c, r); out.push({ kind: 'stepRocks', x: cx, y: cy, lift: 1.2, yaw: side(dx, dy), pitch: 0, rnd: rand(), sx: R * 1.5, sy: R * 1.5, sz: R * .5 });
+        // living world phase 1: a real riffle instead of the stretched Kenney river-rocks tile (it carried its own grass and water squares):
+        // a crooked line of flat stepping stones just below the road line, and loose cobbles scattered through the shallows
+        const [dx, dy] = crossDir(M, c, r), ex = dy, ey = -dx;   // (dx, dy) across the water along the road, (ex, ey) along the water
+        for (let k = -5; k <= 5; k++) { const a = k * R * .095 + (rand() - .5) * 3, b = R * .16 + (rand() - .5) * 4, sz = 2.6 + rand() * 1.6;
+          out.push({ kind: 'stoneB', x: cx + dx * a + ex * b, y: cy + dy * a + ey * b, lift: .5, yaw: rand() * 6.283, pitch: 0, rnd: rand(), sx: sz * 1.6, sy: sz * 3.2, sz: sz * 1.3 }); }
+        for (let k = 0; k < 26; k++) { const a = (rand() - .5) * R * 1.1, b = (rand() - .5) * R * 1.3, sz = 1.0 + rand() * 1.4;
+          out.push({ kind: 'stoneB', x: cx + dx * a + ex * b, y: cy + dy * a + ey * b, lift: .2, yaw: rand() * 6.283, pitch: 0, rnd: rand(), sx: sz * 1.4, sy: sz * 2.6, sz: sz * 1.2 }); }
       }
     }
     for (const [c, r, kind] of (M.structures || [])) {       // named structures listed in the map file
       if (!M.in(c, r)) continue;
       const rand = CW.rng(c * 7919 + r * 104729 + 99), [cx, cy] = CW.center(c, r);
-      if (kind === 'mill') {   // wheel (+X) toward the water; set back so the wheel just reaches the bank
-        let [wx, wy] = towardSet(M, c, r, (a, b) => WATER.has(M.ter(a, b))); if (!wx && !wy) [wx, wy] = [1, 0];
-        const x = cx + wx * R * .22, y = cy + wy * R * .22; bld('grist_mill', x, y, side(wx, wy), rand()); claim(x, y, foot('grist_mill'));
-        kit('logsBig', x - wy * R * .5 - wx * R * .2, y + wx * R * .5 - wy * R * .2, 8, rand() * 6.283, rand());
+      if (kind === 'mill') {   // living world phase 1: the mill stands ON the bank of open river (not the bridge), its wheel over the water, turning
+        const WW = CW.WorldWater ? CW.WorldWater.fromMap(M) : null, ml = WW && WW.mills.find(m => Math.hypot(m.x - cx, m.y - cy) < R * 2.5);
+        const best = ml ? 1 : null;
+        if (best) {
+          const { x, y, yaw, wx, wy } = ml, off = 6.0 * K, nx = Math.cos(yaw + Math.PI / 2), ny = -Math.sin(yaw + Math.PI / 2);
+          bld('grist_mill', x, y, yaw, rand(), 0, K, 0); claim(x, y, foot('grist_mill'));
+          if (MD.mill_wheel) out.push({ kind: 'mill_wheel', x: x + wx * off, y: y + wy * off, lift: 3.6 * K, yaw, pitch: 0, rnd: rand(), sx: K, sy: K, sz: K });
+          kit('logsBig', x - wx * R * .55 + nx * R * .15, y - wy * R * .55 + ny * R * .15, 8, rand() * 6.283, rand());
+        } else {
+          let [wx, wy] = towardSet(M, c, r, (a, b) => WATER.has(M.ter(a, b))); if (!wx && !wy) [wx, wy] = [1, 0];
+          const x = cx + wx * R * .22, y = cy + wy * R * .22; bld('grist_mill', x, y, side(wx, wy), rand()); claim(x, y, foot('grist_mill'));
+        }
       }
     }
     return out;
@@ -161,7 +175,7 @@ CW.WorldStructures = (function () {
     float box(vec2 p) { vec2 d = abs(p) - vB.xy; return 1.0 - smoothstep(-2.5, 2.5, max(d.x, d.y)); }
     void main() { float a = 0.0; for (int k = 0; k <= 12; k++) { float t = float(k) / 12.0; a = max(a, box(vQ - vS * t) * (1.0 - 0.3 * t)); }
       gl_FragColor = vec4(0.07, 0.07, 0.13, a * 0.6); }`;
-  const NO_SHADOW = new Set(['stone_bridge', 'earthwork', 'stepRocks', 'rockA', 'rockC', 'logsBig', 'picket', 'garden', 'barrels']);
+  const NO_SHADOW = new Set(['stone_bridge', 'earthwork', 'stepRocks', 'stoneB', 'mill_wheel', 'rockA', 'rockC', 'logsBig', 'picket', 'garden', 'barrels']);
   function shadows(list) {
     const MD = CW.MODELS, items = list.filter(o => MD[o.kind] && MD[o.kind].norm === 'meters' && !NO_SHADOW.has(o.kind)), n = items.length; if (!n) return null;
     const base = new Float32Array(n * 3), box = new Float32Array(n * 4);
@@ -202,7 +216,7 @@ CW.WorldStructures = (function () {
     const SM = CW.MODELS; if (!SM) throw new Error('models.js missing');
     dispose(); scene = env.scene; const list = place(env.M).filter(o => !(CW.TREES && o.kind === 'broadleaf') && o.kind !== 'heroOak'); list.W3 = env.W3;   // yard trees: drawn by world_trees.js
     const fog = { uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
-    parts = CW.WorldEdges.instanced(scene, list, SM, [...new Set(list.map(o => o.kind))], fog);
+    parts = CW.WorldEdges.instanced(scene, list, SM, [...new Set(list.map(o => o.kind))], fog, { U: env.U, spin: { mill_wheel: -0.9 } });   // living world: the mill wheel turns
     const sh = shadows(list); if (sh) { scene.add(sh); parts.push(sh); }
     const sm = smoke(list, env.U); if (sm) { scene.add(sm); parts.push(sm); }
     return list.length;

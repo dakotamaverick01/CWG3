@@ -82,14 +82,19 @@ CW.WorldEdges = (function () {
   // are drawn here from the model's own coordinates in metres, so no texture files are needed: clapboard, brick, stone blocks,
   // shingles, tin, board-and-batten, planks, log grain, earth, hay, canvas, dirt. Every line is anti-aliased and fades out
   // when it would be thinner than ~2 screen pixels (zoomed out), so nothing shimmers. Lighting: low western sun + sky/ground fill.
-  const IVS = `attribute vec3 aBase, aRot, aSc, color; attribute float aK; varying vec3 vCol, vL, vNl, vN, vW; varying float vDist, vK, vR0;
+  const IVS = `uniform float uT, uLive, uSpin, uDet; attribute vec3 aBase, aRot, aSc, color; attribute float aK; varying vec3 vCol, vL, vNl, vN, vW; varying float vDist, vK, vR0;
     void main() {
       float cy = cos(aRot.x), sy = sin(aRot.x), cp = cos(aRot.y), sp = sin(aRot.y);
-      vec3 l = position * aSc; vec3 p = vec3(l.x * cp - l.y * sp, l.x * sp + l.y * cp, l.z); p = vec3(p.x * cy + p.z * sy, p.y, -p.x * sy + p.z * cy);
-      vec3 n = vec3(normal.x * cp - normal.y * sp, normal.x * sp + normal.y * cp, normal.z); n = vec3(n.x * cy + n.z * sy, n.y, -n.x * sy + n.z * cy);
+      vec3 l0 = position, n0 = normal;
+      #ifdef SPIN
+      float sa = uSpin * uT * uLive * step(0.5, uDet) + aRot.z * 6.283, sc = cos(sa), ss = sin(sa);   /* living world: wheel turns about its own X axle (Living off = still) */
+      l0 = vec3(l0.x, l0.y * sc - l0.z * ss, l0.y * ss + l0.z * sc); n0 = vec3(n0.x, n0.y * sc - n0.z * ss, n0.y * ss + n0.z * sc);
+      #endif
+      vec3 l = l0 * aSc; vec3 p = vec3(l.x * cp - l.y * sp, l.x * sp + l.y * cp, l.z); p = vec3(p.x * cy + p.z * sy, p.y, -p.x * sy + p.z * cy);
+      vec3 n = vec3(n0.x * cp - n0.y * sp, n0.x * sp + n0.y * cp, n0.z); n = vec3(n.x * cy + n.z * sy, n.y, -n.x * sy + n.z * cy);
       float lam = max(dot(normalize(n), normalize(vec3(-0.5, 0.75, 0.25))), 0.0);   // same low western sun as the trees
       vCol = color * (0.52 + 0.62 * lam) * (0.9 + 0.2 * aRot.z) * vec3(1.04, 0.99, 0.88);
-      vL = position; vNl = normal; vN = n; vK = aK; vR0 = aRot.z; vW = aBase + p;
+      vL = l0; vNl = n0; vN = n; vK = aK; vR0 = aRot.z; vW = aBase + p;
       vec4 mv = viewMatrix * vec4(aBase + p, 1.0); vDist = -mv.z; gl_Position = projectionMatrix * mv; }`;
   const IFS = `uniform vec3 uFog; uniform vec2 uFogR; varying vec3 vCol, vL, vNl, vN, vW; varying float vDist, vK, vR0;
     float vR;   // per-building random number, snapped so tiny interpolation errors can't flip a building's paint pixel by pixel
@@ -181,7 +186,7 @@ CW.WorldEdges = (function () {
   }
 
   // one instanced mesh per kind. items: [{kind, x, y (map px), lift, yaw, pitch, rnd, sx, sy, sz}]; MESH = baked meshes (edge_meshes.js / struct_meshes.js); also used by world_structures.js
-  function instanced(scene, list, EM, kinds, fog) {
+  function instanced(scene, list, EM, kinds, fog, opt) {   // opt.spin = {kind: radians per second}, opt.U = shared Living uniforms
     const out = [];
     for (const kind of kinds) { const items = list.filter(t => t.kind === kind), n = items.length; if (!n) continue; const m = EM[kind], W3 = list.W3;
       const base = new Float32Array(n * 3), rot = new Float32Array(n * 3), sc = new Float32Array(n * 3);
@@ -191,7 +196,9 @@ CW.WorldEdges = (function () {
       g.setAttribute('color', new THREE.BufferAttribute(dec(m.c, Uint8Array), 3, true)); g.setIndex(new THREE.BufferAttribute(dec(m.i, Uint16Array), 1));
       g.setAttribute('aK', new THREE.BufferAttribute(m.k ? new Float32Array(dec(m.k, Uint8Array)) : new Float32Array(m.n), 1));   // surface pattern id per vertex
       g.setAttribute('aBase', new THREE.InstancedBufferAttribute(base, 3)); g.setAttribute('aRot', new THREE.InstancedBufferAttribute(rot, 3)); g.setAttribute('aSc', new THREE.InstancedBufferAttribute(sc, 3)); g.instanceCount = n;
-      const me = new THREE.Mesh(g, new THREE.ShaderMaterial({ vertexShader: IVS, fragmentShader: IFS, uniforms: { ...fog }, side: THREE.DoubleSide })); me.frustumCulled = false; me.renderOrder = 0;
+      const me = new THREE.Mesh(g, new THREE.ShaderMaterial({ vertexShader: IVS, fragmentShader: IFS, side: THREE.DoubleSide,
+        defines: (opt && opt.spin && opt.spin[kind] && opt.U) ? { SPIN: 1 } : {},
+        uniforms: { ...fog, uT: (opt && opt.U && opt.U.uT) || { value: 0 }, uLive: (opt && opt.U && opt.U.uLive) || { value: 0 }, uSpin: { value: (opt && opt.spin && opt.spin[kind]) || 0 }, uDet: (opt && opt.U && opt.U.uDet) || { value: 1 } } })); me.frustumCulled = false; me.renderOrder = 0;
       scene.add(me); out.push(me); }
     return out;
   }
@@ -207,9 +214,16 @@ CW.WorldEdges = (function () {
     const roadMat = new THREE.ShaderMaterial({ vertexShader: ROAD_VS, fragmentShader: ROAD_FS, uniforms: { ...fog, uTone: { value: new THREE.Vector3(.84, .80, .72) } }, transparent: true, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, side: THREE.DoubleSide });
     let ri = 0;
+    const WWr = CW.WorldWater ? CW.WorldWater.fromMap(M) : null, fords = M.all.filter(([q, r]) => M.ter(q, r) === 'd').map(h => CW.center(...h));
+    const riverD = (x, y) => { let d = 1e9; for (const ln of (WWr ? WWr.rivers : [])) for (let i = 0; i < ln.length - 1; i++) { const [p, q] = [ln[i], ln[i + 1]], dx = q[0] - p[0], dy = q[1] - p[1],
+      t = Math.max(0, Math.min(1, ((x - p[0]) * dx + (y - p[1]) * dy) / (dx * dx + dy * dy || 1))); d = Math.min(d, Math.hypot(x - p[0] - dx * t, y - p[1] - dy * t)); } return d; };
+    const fordFade = line => { if (!fords.length || !WWr) return null; const half = WWr.rw * .52, af = new Float32Array(line.length); let any = false;   // living world: the road runs down INTO the ford
+      line.forEach(([x, y], i) => { const near = fords.some(f => Math.hypot(f[0] - x, f[1] - y) < CW.R * 1.2); if (!near) { af[i] = 1; return; }
+        const t = Math.max(0, Math.min(1, (riverD(x, y) - half * .35) / (half * .75))); af[i] = t * t * (3 - 2 * t); if (af[i] < 1) any = true; });
+      return any ? af : null; };
     for (const rd of M.roads) { const hw = rd.major ? 6.5 : 5, line = smooth(rd.p.map(p => CW.center(...p)), 4);
       const cross = [[-hw * 1.4, col(70, 52, 30, 0)], [-hw * 1.08, col(86, 64, 38, .5)], [-hw * .72, col(136, 108, 70, 1)], [0, col(158, 130, 88, 1)], [hw * .72, col(136, 108, 70, 1)], [hw * 1.08, col(86, 64, 38, .5)], [hw * 1.4, col(70, 52, 30, 0)]];
-      const me = ribbon(line, cross, W3, 1.3, roadMat, null, null, { major: rd.major ? 1 : 0, seed: ++ri }); scene.add(me); parts.push(me); stats.roads++; }
+      const me = ribbon(line, cross, W3, 1.3, roadMat, null, fordFade(line), { major: rd.major ? 1 : 0, seed: ++ri }); scene.add(me); parts.push(me); stats.roads++; }
     // brooks: the water itself is the river's own water ribbon (render3d.js buildRibbon); here only the mud bank under it and the gravel beside it.
     // Lines come from the map file alone (world_water.js), spring first, mouth last.
     const bankMat = rmat([.86, .84, .78], -1), pebbles = [], pr = CW.rng(4242);
