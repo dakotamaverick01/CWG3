@@ -141,6 +141,71 @@ CW.WorldPaint = (function () {
         (Wd.rivers || []).forEach(l => st(l, Wd.rw * 1.3, rgb(PAL.mud, .9))); (Wd.streams || []).forEach(l => st(l, 10, rgb(PAL.mud, .85))); }
       else { (Wd.rivers || []).forEach(l => st(l, Wd.rw * 1.1, 'rgb(0,0,0)')); (Wd.streams || []).forEach(l => st(l, 7, 'rgb(0,0,0)')); }
       ctx.restore(); });
+    // 7b. LIVING WORLD phase 2 — ground up close (baked into the colour map, so it costs nothing per frame and shows on every Detail level)
+    // (a) where flowers may grow: pasture and knolls only (not crops, woods, yards, roads, water)
+    const FK = .25, fw = Math.ceil(MW * FK), fh = Math.ceil(MH * FK), mc = document.createElement('canvas'); mc.width = fw; mc.height = fh; const m = mc.getContext('2d');
+    m.scale(FK, FK); m.fillStyle = '#000'; m.fillRect(-50, -50, MW + 100, MH + 100); m.fillStyle = '#fff';
+    for (const [c, r] of M.all) { const t = T(c, r); if (t !== 'g' && t !== 'k') continue; const [cx, cy] = CW.center(c, r); m.beginPath(); for (let d = 0; d < 6; d++) { const q = CW.corner(cx, cy, d); d ? m.lineTo(...q) : m.moveTo(...q); } m.closePath(); m.fill(); }
+    m.fillStyle = '#000'; m.strokeStyle = '#000'; m.lineCap = m.lineJoin = 'round'; fields.forEach(f => { pathOf(m, f.loops); m.fill('evenodd'); });
+    for (const rd of roads) { CW.smoothPath(m, rd.pts); m.lineWidth = 16; m.stroke(); }
+    if (Wd) { (Wd.rivers || []).forEach(l => { CW.smoothPath(m, l); m.lineWidth = Wd.rw * 1.8; m.stroke(); }); (Wd.streams || []).forEach(l => { CW.smoothPath(m, l); m.lineWidth = 18; m.stroke(); }); }
+    const blurOnce = (cv, px) => { const t = document.createElement('canvas'); t.width = cv.width; t.height = cv.height; const tx = t.getContext('2d'); tx.filter = `blur(${px}px)`; tx.drawImage(cv, 0, 0); const c2 = cv.getContext('2d'); c2.save(); c2.setTransform(1, 0, 0, 1, 0, 0); c2.clearRect(0, 0, cv.width, cv.height); c2.drawImage(t, 0, 0); c2.restore(); };
+    blurOnce(mc, 1.5);   // one blur pass for the whole mask (a filter left on during many draws re-blurs the canvas every time: was 80 s)
+    const mask = m.getImageData(0, 0, fw, fh).data;
+    // road verges (chicory loves the dusty roadside): a band 9-26 px from the road centre
+    const vc = document.createElement('canvas'); vc.width = fw; vc.height = fh; const v = vc.getContext('2d'); v.scale(FK, FK); v.lineCap = v.lineJoin = 'round'; 
+    for (const rd of roads) { CW.smoothPath(v, rd.pts); v.strokeStyle = '#fff'; v.lineWidth = 46; v.stroke(); }
+    blurOnce(vc, 1.2); v.globalCompositeOperation = 'destination-out'; for (const rd of roads) { CW.smoothPath(v, rd.pts); v.lineWidth = 15; v.stroke(); }
+    const verge = v.getImageData(0, 0, fw, fh).data;
+    // smooth value noise in JS (drifts), seeded
+    const vnz = (sx, sy, seed) => { const hh = (i, j) => { const q = Math.sin(i * 127.1 + j * 311.7 + seed * 74.7) * 43758.5453; return q - Math.floor(q); };
+      const i = Math.floor(sx), j = Math.floor(sy), fx = sx - i, fy = sy - j, ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+      return (hh(i, j) * (1 - ux) + hh(i + 1, j) * ux) * (1 - uy) + (hh(i, j + 1) * (1 - ux) + hh(i + 1, j + 1) * ux) * uy; };
+    const sst = (a, b, t) => { const k = Math.max(0, Math.min(1, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
+    const flc = document.createElement('canvas'); flc.width = fw; flc.height = fh; const fl = flc.getContext('2d'), fd = fl.createImageData(fw, fh);
+    for (let j = 0; j < fh; j++) for (let i = 0; i < fw; i++) { const o = (j * fw + i) * 4, X = i / FK, Y = j / FK, ok = mask[o] / 255;
+      if (ok < .02) { fd.data[o + 3] = 255; continue; }
+      const white = sst(.66, .9, vnz(X / 95, Y / 95, 1) * .75 + vnz(X / 31, Y / 31, 2) * .35) * ok;                 // Queen Anne's lace: big loose drifts
+      const yel = sst(.56, .8, vnz(X / 60, Y / 60, 3) * .8 + vnz(X / 19, Y / 19, 4) * .3) * ok;                     // black-eyed Susans: smaller, brighter clumps
+      const blue = Math.min(1, verge[o + 3] / 255 * 1.3) * sst(.35, .7, vnz(X / 40, Y / 40, 5)) * ok;                 // chicory along the verges
+      fd.data[o] = white * 255; fd.data[o + 1] = yel * 255; fd.data[o + 2] = blue * 255; fd.data[o + 3] = 255; }
+    fl.putImageData(fd, 0, 0);
+    // (b) clover and bare patches in the pastures: a darker blue-green bloom here and there, sun-bleached straw on the dry knoll crowns
+    x.save(); for (let i = 0; i < 260; i++) { const px = rand() * MW, py = rand() * MH, o = ((Math.floor(py * FK) * fw) + Math.floor(px * FK)) * 4; if (!(mask[o] > 160)) continue;
+      const rr = 7 + rand() * 16, g = x.createRadialGradient(px, py, 0, px, py, rr), clover = rand() < .7, col = clover ? [70, 92, 46] : [150, 138, 84];
+      g.addColorStop(0, rgb(col, clover ? .30 : .22)); g.addColorStop(1, rgb(col, 0)); x.fillStyle = g; x.fillRect(px - rr, py - rr, rr * 2, rr * 2); } x.restore();
+    // (c) the flowers themselves: tiny dots, dense inside each drift (the 3D grass blooms in the same places, from the same map)
+    x.save(); const FCOL = [[[236, 232, 214], [224, 222, 204]], [[232, 176, 34], [214, 150, 24]], [[132, 150, 214], [150, 120, 200]]];
+    for (let n = 0; n < 90000; n++) { const px = rand() * MW, py = rand() * MH, o = ((Math.floor(py * FK) * fw) + Math.floor(px * FK)) * 4, ch = n % 3, w = fd.data[o + ch] / 255;
+      if (rand() > w * (ch === 0 ? .55 : .9)) continue; const cc = FCOL[ch][n & 1]; x.fillStyle = rgb(cc, .55 + rand() * .4); const sz = ch === 0 ? 1.3 + rand() * .9 : .8 + rand() * .6; x.fillRect(px, py, sz, sz * .8); }
+    x.restore();
+    // (d) trodden ground: footpaths between each farmhouse, its barn, well and the road; worn gateway where the farm meets the road; mud where the road meets the ford
+    const near = (pts, px, py) => { let b = null, bd = 1e9; for (let i = 0; i < pts.length - 1; i++) { const p = pts[i], q = pts[i + 1], dx = q[0] - p[0], dy = q[1] - p[1], t = Math.max(0, Math.min(1, ((px - p[0]) * dx + (py - p[1]) * dy) / (dx * dx + dy * dy || 1))), xx = p[0] + dx * t, yy = p[1] + dy * t, d = Math.hypot(xx - px, yy - py); if (d < bd) { bd = d; b = [xx, yy, d]; } } return b; };
+    const tc = document.createElement('canvas'); tc.width = pc.width; tc.height = pc.height; const tctx = tc.getContext('2d'); tctx.scale(K, K); tctx.lineCap = 'round';
+    const path = (a, b, w, al, x = tctx) => { const mx = (a[0] + b[0]) / 2 + (b[1] - a[1]) * .18, my = (a[1] + b[1]) / 2 - (b[0] - a[0]) * .18; x.beginPath(); x.moveTo(...a); x.quadraticCurveTo(mx, my, ...b);
+      x.strokeStyle = rgb([118, 100, 64], al * .5); x.lineWidth = w * 2.2; x.stroke(); x.strokeStyle = rgb([134, 112, 72], al); x.lineWidth = w; x.stroke(); };
+    let items = []; try { items = CW.WorldStructures ? CW.WorldStructures.place(M) : []; } catch (e) { items = []; }
+    const HOUSE = /^(farmhouse|house_b|house_l|cottage|hero_house)$/, BARN = /^(barn|barn_b|hero_barn)$/;
+    { const x = tctx;
+    for (const hs of items.filter(o => HOUSE.test(o.kind))) { const [hc, hr] = CW.pixelToHex(M, hs.x, hs.y) || [-1, -1]; if (hc < 0 || T(hc, hr) !== 'h') continue;
+      const mates = items.filter(o => (BARN.test(o.kind) || o.kind === 'well' || o.kind === 'shed') && Math.hypot(o.x - hs.x, o.y - hs.y) < R * 1.3);
+      mates.forEach(o => path([hs.x, hs.y], [o.x, o.y], o.kind === 'well' ? 2 : 3, .55));
+      let rb = null; for (const rd of roads) { const q = near(rd.pts, hs.x, hs.y); if (q && (!rb || q[2] < rb[2])) rb = q; }
+      if (rb && rb[2] < R * 1.6) { path([hs.x, hs.y], [rb[0], rb[1]], 3.4, .6);
+        const g = x.createRadialGradient(rb[0], rb[1], 0, rb[0], rb[1], 13); g.addColorStop(0, rgb([126, 104, 66], .55)); g.addColorStop(1, rgb([126, 104, 66], 0)); x.fillStyle = g; x.fillRect(rb[0] - 13, rb[1] - 13, 26, 26); } }
+    }
+    x.save(); x.setTransform(1, 0, 0, 1, 0, 0); x.drawImage(tc, 0, 0); x.restore();   /* no blur on the full-size map: one blur pass there costs seconds on slow GPUs; the paths are soft-edged already */ x.save(); x.scale(1, 1);
+    if (Wd) for (const [c, r] of M.all) { if (T(c, r) !== 'd') continue; const [cx, cy] = CW.center(c, r);
+      for (const rd of roads) for (let i = 0; i < rd.pts.length - 1; i++) { const p = rd.pts[i], q = rd.pts[i + 1];
+        for (let k = 0; k <= 20; k++) { const px = p[0] + (q[0] - p[0]) * k / 20, py = p[1] + (q[1] - p[1]) * k / 20; if (Math.hypot(px - cx, py - cy) > R * 1.3) continue;
+          let d = 1e9; (Wd.rivers || []).forEach(l => { const nn = near(l, px, py); if (nn) d = Math.min(d, nn[2]); });
+          if (d > Wd.rw * .45 && d < Wd.rw * .95) { const rr = 9, g = x.createRadialGradient(px, py, 0, px, py, rr); g.addColorStop(0, rgb(PAL.mud, .5)); g.addColorStop(1, rgb(PAL.mud, 0)); x.fillStyle = g; x.fillRect(px - rr, py - rr, rr * 2, rr * 2); } } } }
+    // (e) the strip a scythe misses: taller, darker grass with a few grey stones along every wall and fence
+    x.lineCap = 'round';
+    M.edgeAt && M.edgeAt.forEach((types, k) => { const wall = types.has('wall'); if (!wall && !types.has('fence')) return; const [c, r, d] = k.split(',').map(Number), [x0, y0] = CW.center(c, r), a = CW.corner(x0, y0, d), b = CW.corner(x0, y0, d + 1);
+      x.strokeStyle = rgb([70, 84, 38], wall ? .45 : .28); x.lineWidth = wall ? 11 : 7; x.beginPath(); x.moveTo(...a); x.lineTo(...b); x.stroke();
+      if (wall) for (let i = 0; i < 7; i++) { const t = rand(), j = (rand() - .5) * 9; x.fillStyle = rgb([150, 146, 132], .5 + rand() * .3); x.fillRect(a[0] + (b[0] - a[0]) * t - (b[1] - a[1]) / 44 * j, a[1] + (b[1] - a[1]) * t + (b[0] - a[0]) / 44 * j, 1.6, 1.3); } });
+    x.restore();
     // 8. fine grain over everything (reads at mid zoom; the shader adds finer grain up close)
     x.save(); x.globalCompositeOperation = 'soft-light'; x.globalAlpha = .3; x.imageSmoothingEnabled = false; x.drawImage(noise(Math.ceil(MW / 3), Math.ceil(MH / 3), 5), 0, 0, MW, MH); x.restore();
     // fences: a field whose hex boundary is mostly fenced gets ONE fence along its farm-shaped outline (gaps where roads cross); other fence edges stay on their hex edge
@@ -155,7 +220,7 @@ CW.WorldPaint = (function () {
           if (!nearRoad((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)) fenceSegs.push({ p: a, q: b, k: Math.round(a[0] * 7 + a[1] * 131) }); } } }); }
     M.edgeAt && M.edgeAt.forEach((types, k) => { if (!types.has('fence') || used.has(k)) return; const [c, r, d] = k.split(',').map(Number), [x0, y0] = CW.center(c, r);
       fenceSegs.push({ p: CW.corner(x0, y0, d), q: CW.corner(x0, y0, d + 1), k: c * 7919 + r * 104729 + d * 31 }); });
-    M._paint = { paint: pc, data: dc, fields, crops, fenceSegs, K, DK }; CW.WorldPaint.last = M._paint;
+    M._paint = { paint: pc, data: dc, flowers: flc, fields, crops, fenceSegs, K, DK }; CW.WorldPaint.last = M._paint;
     return M._paint;
   }
   return { build, fenceSegs: M => build(M).fenceSegs, PAL };

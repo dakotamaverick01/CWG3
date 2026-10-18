@@ -15,7 +15,7 @@ CW.R3 = (function () {
   const S = { res: 1, dpr0: 0, tilt: TILT_DEF, anim: null, last: null, live: false, raf: 0, prev: 0, acc: 0, n: 0, win0: 0, mats: [], wk: new Map(), src: null, threads: null };
   // ---------- living landscape (sessions 17a-b, 18, 19): cloud shadows, 3D creek + wake, wind in the wheat, brook thread, tree sway, warm haze; one time uniform, patched into the ground material ----------
   const U = { uT: { value: 0 }, uLive: { value: 0 }, uWater: { value: null }, uForest: { value: null }, uWheatM: { value: null }, uWheatA: { value: null }, uWheatAvg: { value: window.THREE ? new THREE.Vector3(.31, .22, .084) : null }, uWheatOn: { value: 0 }, uMap: { value: window.THREE ? new THREE.Vector2(1, 1) : null },
-    uGround: { value: 0 }, uRelief: { value: null }, uPaint: { value: null }, uPData: { value: null }, uPaintOn: { value: 0 }, uPaintSz: { value: window.THREE ? new THREE.Vector2(1, 1) : null }, uHgt: { value: null }, uHgtSz: { value: window.THREE ? new THREE.Vector2(1, 1) : null }, uDet: { value: 1 }, uShade: { value: null }, uGA: { value: null }, uGW0: { value: null }, uGW1: { value: null } };   // world-mesh pass: tiled ground textures + terrain weight maps
+    uGround: { value: 0 }, uRelief: { value: null }, uPaint: { value: null }, uPData: { value: null }, uFlow: { value: null }, uPaintOn: { value: 0 }, uPaintSz: { value: window.THREE ? new THREE.Vector2(1, 1) : null }, uHgt: { value: null }, uHgtSz: { value: window.THREE ? new THREE.Vector2(1, 1) : null }, uDet: { value: 1 }, uShade: { value: null }, uGA: { value: null }, uGW0: { value: null }, uGW1: { value: null } };   // world-mesh pass: tiled ground textures + terrain weight maps
   const GLSL_NOISE = `
     float cwH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float cwN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -335,7 +335,7 @@ CW.R3 = (function () {
     try { const P = CW.WorldPaint.build(M), mk = (cv, srgb) => { const t = new THREE.CanvasTexture(cv); t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
         t.flipY = false; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.anisotropy = srgb ? Math.min(8, ren.capabilities.getMaxAnisotropy()) : 1; t.needsUpdate = true; return t; };
       if (U.uPaint.value) U.uPaint.value.dispose(); if (U.uPData.value) U.uPData.value.dispose();
-      U.uPaint.value = mk(P.paint, true); U.uPData.value = mk(P.data, false); U.uPaintSz.value.set(P.paint.width / P.K, P.paint.height / P.K); U.uPaintOn.value = 1; S.paint = P;
+      U.uPaint.value = mk(P.paint, true); U.uPData.value = mk(P.data, false); if (U.uFlow.value) U.uFlow.value.dispose(); U.uFlow.value = P.flowers ? mk(P.flowers, false) : null; U.uPaintSz.value.set(P.paint.width / P.K, P.paint.height / P.K); U.uPaintOn.value = 1; S.paint = P;
     } catch (e) { console.warn('colour map skipped, tiled ground in use:', e.message); U.uPaintOn.value = 0; } }
   function buildGround(img) {
     let feat = null; try { if (buildGroundTex()) { buildGroundWeights(); buildPaint(); feat = buildFeatures(); } } catch (e) { console.warn('tiled ground skipped, painted map in use:', e.message); feat = null; }

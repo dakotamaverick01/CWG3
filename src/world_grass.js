@@ -33,7 +33,7 @@ CW.WorldGrass = (function () {
   }
 
   const VS = `attribute vec4 aB, aD; attribute vec2 aOff;
-    uniform vec2 uCen, uMap, uOccN, uHgtSz; uniform float uS, uSP, uZoom, uT, uLive, uWrap, uReed, uCrop, uDetG; uniform sampler2D uGD, uHex, uOcc, uRelief, uShade, uPaint, uPData; uniform float uPaintOn; uniform vec2 uPaintSz; varying vec3 vCol; varying float vDist;
+    uniform vec2 uCen, uMap, uOccN, uHgtSz; uniform float uS, uSP, uZoom, uT, uLive, uWrap, uReed, uCrop, uDetG; uniform sampler2D uGD, uHex, uOcc, uRelief, uShade, uPaint, uPData, uFlow; uniform float uPaintOn; uniform vec2 uPaintSz; varying vec3 vCol; varying float vDist;
     ${CW.WorldTrees.WIND}
     ${CW.SUN.cloudGLSL}
     const vec3 SUN = ${CW.SUN.glsl};
@@ -50,7 +50,9 @@ CW.WorldGrass = (function () {
       if (uWrap > 0.5 && uCrop < 0.5) { if (r1 > gd.g * (0.55 + 0.9 * vn(p / 23.0))) k = 0.0; k *= 1.0 - smoothstep(uS * 0.36, uS * 0.5, length(p - uCen)); }
       if (uCrop > 0.5 && r1 < (uDetG < 0.5 ? 0.33 : 0.0) + 0.45 * (1.0 - smoothstep(0.9, 1.8, uZoom))) k = 0.0;   // fewer (wider) tufts when zoomed out; Low detail thinner rows
       bool fl = aD.w > 0.5 && aD.w < 1.5;
-      if (fl && (r3 > 0.006 + 0.08 * smoothstep(0.6, 0.86, vn(p / 170.0 + 11.0)) || gd.b > 0.5 || gd.a > 0.5)) k = 0.0;
+      vec3 fw = uPaintOn > 0.5 ? texture2D(uFlow, puv).rgb : vec3(0.0); float fsum = max(fw.r, max(fw.g, fw.b));   // living world: blooms where the colour map has its flower drifts
+      float fchance = uPaintOn > 0.5 ? 0.002 + 0.2 * fsum * fsum : 0.006 + 0.08 * smoothstep(0.6, 0.86, vn(p / 170.0 + 11.0));
+      if (fl && (r3 > fchance || gd.b > 0.5 || gd.a > 0.5)) k = 0.0;
       if (k < 0.02) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
       vec2 hx = floor(texture2D(uHex, uv).rg * 255.0 + 0.5); float occ = step(0.5, texture2D(uOcc, (hx + 0.5) / uOccN).r) * (1.0 - uReed);
       float crH = uPaintOn > 0.5 && uCrop > 0.5 ? (uCrop > 1.5 ? step(0.8, pd.r) : clamp(pd.r / 0.59, 0.0, 1.1)) : 1.0; if (crH < 0.1) k = 0.0;
@@ -75,6 +77,8 @@ CW.WorldGrass = (function () {
       if (uCrop > 0.5 && uCrop < 1.5) col = mix(vec3(0.07, 0.06, 0.015), vec3(0.50, 0.35, 0.09) * (0.85 + 0.3 * r2), pow(t, 0.6)) * mix(1.0, 0.8, smoothstep(0.55, 0.9, vn(p / 40.0)));
       if (uCrop > 1.5) col = aD.w > 3.5 && aD.w < 4.5 ? vec3(0.40, 0.31, 0.12) : mix(vec3(0.02, 0.04, 0.01), vec3(0.10, 0.21, 0.04) * (0.8 + 0.4 * r2), pow(t, 0.6));
       float fk = mix(r2, vn(p / 55.0 + 4.0), 0.75); if (fl) col = fk < 0.4 ? vec3(0.85, 0.83, 0.72) : fk < 0.75 ? vec3(0.9, 0.62, 0.05) : vec3(0.38, 0.14, 0.55);
+      if (fl && uPaintOn > 0.5 && fsum > 0.02) { float pick = r2 * (fw.r + fw.g + fw.b);   // same flower as the painted drift under it
+        col = pick < fw.r ? vec3(0.86, 0.84, 0.74) : pick < fw.r + fw.g ? vec3(0.88, 0.58, 0.05) : vec3(0.36, 0.46, 0.86); }
       if (uPaintOn > 0.5 && !fl && uReed < 0.5 && !(aD.w > 1.5 && aD.w < 2.5) && !(uCrop > 1.5 && aD.w > 3.5 && aD.w < 4.5)) {   // blades and stalks take their colour from the colour map under them
         col = uCrop > 0.5 ? mix(pcol * 0.38, pcol * (uCrop > 1.5 ? 1.05 : 1.08), pow(t, 0.6)) : mix(pcol * 0.30, pcol * 1.22, pow(t, 0.7)); }
       vec3 V = normalize(cameraPosition - wp); float face = 0.85 + 0.3 * dot(perp, normalize(SUN.xz)) * aB.w * 0.5;
@@ -167,7 +171,7 @@ CW.WorldGrass = (function () {
     const D = mapData(M, W3, MW, MH), n = Math.round(Sz / SP), lat = new Float32Array(n * n * 2);
     let q = 0; for (let m = 0; m < n; m++) for (let j = 0; j <= m; j++) for (let i = 0; i <= m; i++) if (Math.max(i, j) === m) lat.set([(i + .5) * SP, (j + .5) * SP], 2 * q++);   // square shells: the first m*m tufts make an m x m square
     const base = { uGD: { value: D.T1 }, uHex: { value: D.T2 }, uOcc: { value: occ }, uOccN: { value: new THREE.Vector2(M.cols, M.rows) }, uMap: { value: new THREE.Vector2(MW, MH) },
-      uCen: { value: new THREE.Vector2() }, uS: { value: Sz }, uSP: { value: SP }, uPaint: U.uPaint || { value: null }, uPData: U.uPData || { value: null }, uPaintOn: U.uPaintOn || { value: 0 }, uPaintSz: U.uPaintSz || { value: new THREE.Vector2(1, 1) }, uDetG: U.uDet || { value: 1 }, uRelief: U.uRelief, uShade: U.uShade || { value: null }, uHgtSz: U.uHgtSz, uZoom: { value: 3 }, uT: U.uT, uLive: U.uLive, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
+      uCen: { value: new THREE.Vector2() }, uS: { value: Sz }, uSP: { value: SP }, uPaint: U.uPaint || { value: null }, uPData: U.uPData || { value: null }, uFlow: U.uFlow || { value: null }, uPaintOn: U.uPaintOn || { value: 0 }, uPaintSz: U.uPaintSz || { value: new THREE.Vector2(1, 1) }, uDetG: U.uDet || { value: 1 }, uRelief: U.uRelief, uShade: U.uShade || { value: null }, uHgtSz: U.uHgtSz, uZoom: { value: 3 }, uT: U.uT, uLive: U.uLive, uFog: { value: scene.fog.color }, uFogR: { value: new THREE.Vector2(scene.fog.near, scene.fog.far) } };
     const grass = mesh(tuft(false, 99), lat, Object.assign({}, base, { uWrap: { value: 1 }, uReed: { value: 0 }, uCrop: { value: 0 } }));
     const rs = reedSpots(M, D.water, MW, MH), reeds = rs.length ? mesh(tuft(true, 77), rs, Object.assign({}, base, { uWrap: { value: 0 }, uReed: { value: 1 }, uCrop: { value: 0 } })) : null;
     const P = CW.WORLD && CW.WorldPaint && U.uPaintOn && U.uPaintOn.value ? CW.WorldPaint.build(M) : null;
