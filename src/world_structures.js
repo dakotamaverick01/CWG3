@@ -201,7 +201,7 @@ CW.WorldStructures = (function () {
   function smoke(list, U) {
     const MD = CW.MODELS, pts = [];
     for (const o of list) { const m = MD[o.kind]; if (!m || !m.smoke) continue;
-      m.smoke.forEach((a, i) => { if (((o.rnd * 9.7 + i * .37) % 1) > .55) return;                    // about half the chimneys are lit
+      m.smoke.forEach((a, i) => { if (!/house|cottage|cabin/.test(o.kind) && ((o.rnd * 9.7 + i * .37) % 1) > .55) return;   // living world phase 3: every home's kitchen fire is lit; about half the other chimneys
         const cy = Math.cos(o.yaw), sy = Math.sin(o.yaw), lx = a[0] * o.sx, lz = a[2] * o.sz; pts.push([o.x + lx * cy + lz * sy, o.y - lx * sy + lz * cy, o.lift + a[1] * o.sy, o.rnd + i]); }); }
     if (!pts.length || !U) return null;
     const P = 7, n = pts.length * P, base = new Float32Array(n * 3), seed = new Float32Array(n * 2);

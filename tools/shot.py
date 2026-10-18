@@ -42,7 +42,7 @@ def main():
         else:
             pg = b.new_page(viewport={'width': 1000, 'height': 640})
             pg.on('console', lambda m: logs.append(m.type + ': ' + m.text[:240])); pg.on('pageerror', lambda e: logs.append('PAGEERROR: ' + str(e)[:240]))
-            pg.goto('file://' + ROOT + '/play.html'); pg.wait_for_timeout(4000)
+            pg.goto('file://' + ROOT + '/play.html', timeout=180000); pg.wait_for_timeout(4000)
             pg.get_by_text('New battle').first.click(); pg.wait_for_timeout(1000)
             pg.locator('select:visible').first.select_option(label='Union (valley, west)')
             pg.evaluate("() => { const b=[...document.querySelectorAll('button')].find(x=>x.offsetParent && /begin/i.test(x.textContent)); b.click(); }")

@@ -1,27 +1,27 @@
 # REPORT (Claude's result for the last brief) — overwritten after each task
-Brief: 18 Oct, John in chat (Opus): claude/PLAN_WORLD_PHASES.md (living world; drafted by Claude, approved by John), Phase 1 re-aimed with John's OK.
-Branch / commit: main (f36c314 + this report)
-Result: DONE (Phase 1 of 5). Stopped for John before Phase 2.
+Brief: 18 Oct, John in chat (Opus): claude/PLAN_WORLD_PHASES.md, Phases 2 (Ground up close) and 3 (Farm life), John said do both.
+Branch / commit: main (754d34b phase 2, then phase 3 + this report)
+Result: DONE (Phases 2 and 3 of 5). Stopped for John before Phase 4.
 
 ## What changed (≤5 lines)
-- Found the river already flowed (Blender flipbook ribbon since 5 Oct), so Phase 1 fixed where things meet the water instead.
-- Mill: now stands on the river bank clear of the bridge; its wheel is a separate model that turns (stops when Living is off or Detail is Low) over a new tailrace that flows back into the river.
-- Ford: the stretched Kenney river-rocks tile (its own grass and water squares) is gone; a crooked line of stepping stones and loose cobbles instead, and the road fades down into the water.
-- Water: white water over the ford stones, at the bridge piers, at brook mouths and under the mill wheel; quicker water where it drops; on High the banks and their trees darken the reflection near each shore.
+- Phase 2 (colour map, so free and on every Detail level): a flower drift map (Queen Anne's lace, black-eyed Susans, chicory on road verges); the 3D grass blooms from the SAME map so close-up flowers sit on the painted drifts; clover and sun-bleached patches; footpaths house-barn-well-road with a worn gateway; mud aprons where the road meets the ford; the uncut strip with stones along every wall and fence. Lane ruts/grass crowns already existed.
+- Phase 3: horses beyond the barn, pigs beside it, hens wandering and pecking in the side yard (placed from where each farm's buildings really stand); laundry is now cloth that billows with the grass gusts (sheets taken out of the washline model); every home's kitchen chimney smokes.
+- Fixed on the way: a canvas blur left on during many draws made the colour map take 80 s; play.html script versions bumped (lw2/lw3) so browsers can't serve stale files; tools/shot.py waits up to 180 s for the page (the cloud browser's paint is slow).
 
 ## Detail levels
-Low: no wheel spin, no fast-water layer, no bank reflections (white water kept: it reuses texture reads already made). Medium: spin + fast water. High: + bank reflections.
-Timing: software-GL numbers swung ±30% run to run; John said not to worry about it. Check feel on the Mac.
+Low: painted ground detail stays (it is baked), no hens, horses/pigs graze but nothing walks, laundry still. Medium/High: hens wander and peck, laundry billows. Low was checked in code, not screenshotted.
+Living off: frozen (measured: two frames 2 s apart differ by 0.5/255 on average).
 
 ## Files touched
-src/world_water.js, src/world_structures.js, src/world_edges.js, src/render3d.js, tools/gen_models.py, assets/models/{MANIFEST.json,CREDITS.md,src/gen/grist_mill.glb,src/gen/mill_wheel.glb}, assets/art/models.js, ASSET_CREDITS.md
+src/world_paint.js, src/world_grass.js, src/render3d.js, src/world_life.js, src/world_structures.js, tools/gen_models.py, tools/shot.py, assets/models/src/gen/washline.glb, assets/art/models.js, play.html
 
 ## How to revert
-Branch `backup-main-2026-10-18-water` = main before this phase.
+Branch `backup-main-2026-10-18-ground` = main before phase 2 (phase 1 included).
 
 ## Evidence
-docs/shots/living_p1_water.jpg (ford before/after High/Low, mill before/after, wide play view).
+docs/shots/living_p2_p3.jpg.
 
 ## Open questions for John
-1. The "mill after" shot has a haze and a white line over it that my earlier High shot did not; probably the opening-shot mist or an overlay caught mid-fade, not the water. Worth a look on the Mac.
-2. White water strength: subtle now. Stronger or calmer?
+1. Hens are drawn ~1.8x life size so they read at play zoom (like the rest of the diorama). OK, or true size?
+2. Flower drifts: subtle at play zoom, lush up close. More colour at play zoom?
+3. Town hexes got no hens on this map (placement found no free yard); fine to leave.

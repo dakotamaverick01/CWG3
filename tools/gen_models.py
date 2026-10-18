@@ -493,8 +493,7 @@ def washline():
     m = Model('washline'); L = 7.0
     for x in (-L / 2, L / 2): m.box('woodGrey', x - .07, 0, -.07, x + .07, 2.1, .07); m.box('woodGrey', x - .07, 1.95, -.45, x + .07, 2.05, .45)
     m.box('iron', -L / 2, 2.0, -.02, L / 2, 2.03, .02)
-    for x, w, h in ((-2.3, 1.4, 1.3), (-.6, .7, .8), (.6, 1.5, 1.4), (2.3, .7, .7)):
-        with m.at(x=x, ry=8 if x > 0 else -8): m.box('linen', -w / 2, 2.0 - h, -.02, w / 2, 2.0, .02)
+    # the sheets and shirts are drawn by src/world_life.js (they billow in the wind); same layout: (x, width, drop) along the line at y = 2.0
     return m
 
 
